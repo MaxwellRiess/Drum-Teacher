@@ -1,3 +1,114 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    /* Colors */
+    --platinum: hsla(210, 13%, 94%, 1);
+    --silver: hsla(80, 3%, 77%, 1);
+    --lilac-ash: hsla(327, 5%, 62%, 1);
+    --midnight-violet: hsla(328, 23%, 16%, 1);
+    --black: hsla(0, 0%, 0%, 1);
+
+    /* Functional Colors Mapped to Theme */
+    --bg-main: var(--black);
+    --bg-panel: var(--midnight-violet);
+    --text-primary: var(--platinum);
+    --text-secondary: var(--lilac-ash);
+    --accent-primary: var(--silver);
+
+    /* Gradients */
+    --gradient-metal: linear-gradient(180deg, var(--platinum), var(--silver));
+    --gradient-pad-inactive: linear-gradient(145deg, #2a1b22, #1f1319);
+    --gradient-pad-active: radial-gradient(circle at center, #ff4d4d, #990000);
+    /* 808-ish red light */
+
+    /* Additional Pad Colors (Red Spectrum) */
+    --pad-kick: #e60000;
+    /* Deep Red */
+    --pad-snare: #ff4d4d;
+    /* Standard Bright Red */
+    --pad-hat: #ff9999;
+    /* Pale Red/Pink */
+    --pad-tom: #cc3333;
+    /* Medium Red */
+    --pad-perc: #ff6666;
+    /* Soft Red */
+
+    /* Rudiment Accents */
+    --rudiment-r: var(--pad-snare);
+    --rudiment-l: #ffcc00;
+    /* Warm Orange for Left Hand */
+
+    /* Radii & Shadows */
+    --radius-card: 12px;
+    --radius-pad: 4px;
+    --shadow-pad: 2px 2px 5px rgba(0, 0, 0, 0.5), inset 1px 1px 1px rgba(255, 255, 255, 0.1);
+    --shadow-pad-pressed: inset 2px 2px 5px rgba(0, 0, 0, 0.8);
+    --shadow-panel: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+}
+
+/* Hardware Hardware Styles */
+.hardware-panel {
+    background-color: var(--bg-panel);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-panel);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.hardware-pad {
+    background: var(--gradient-pad-inactive);
+    border-radius: var(--radius-pad);
+    box-shadow: var(--shadow-pad);
+    border: none;
+    transition: all 0.1s ease;
+}
+
+.hardware-pad:active {
+    box-shadow: var(--shadow-pad-pressed);
+    transform: translateY(1px);
+}
+
+.hardware-pad.active {
+    background: var(--gradient-pad-active);
+    box-shadow: 0 0 10px #ff0000;
+}
+
+.hardware-btn {
+    background: var(--midnight-violet);
+    color: var(--platinum);
+    border: 1px solid var(--lilac-ash);
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.hardware-btn:hover {
+    background: var(--lilac-ash);
+    color: var(--midnight-violet);
+}
+
+/* Custom Scrollbar for the 80s feel */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--black);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--lilac-ash);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--silver);
+}

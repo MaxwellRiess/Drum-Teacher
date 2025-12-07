@@ -170,13 +170,13 @@ class DrumSynth {
 
 // Instruments mapping
 const instruments = [
-    { id: 'metronome', name: 'Metronome', icon: Clock, color: 'bg-slate-500', y: -15, symbol: 'triangle', voice: 0 }, // High above
-    { id: 'hihat_open', name: 'Hihat Op', icon: Circle, color: 'bg-emerald-500', y: -5, symbol: 'cross_circle', voice: 0 }, // Above top line
-    { id: 'hihat_closed', name: 'Hihat Cl', icon: Circle, color: 'bg-emerald-600', y: -5, symbol: 'cross', voice: 0 }, // Above top line
-    { id: 'clap', name: 'Clap', icon: Sparkles, color: 'bg-pink-500', y: 15, symbol: 'x', voice: 0 }, // Middle
-    { id: 'snare', name: 'Snare', icon: Square, color: 'bg-amber-500', y: 15, symbol: 'circle', voice: 0 }, // 2nd space from top (C)
-    { id: 'tom_low', name: 'Tom Low', icon: Circle, color: 'bg-violet-500', y: 25, symbol: 'circle', voice: 0 }, // 2nd space from bottom (A)
-    { id: 'kick', name: 'Kick', icon: Square, color: 'bg-rose-500', y: 45, symbol: 'circle', voice: 1 }, // Below bottom line (F)
+    { id: 'metronome', name: 'Metronome', icon: Clock, color: 'var(--pad-perc)', y: -15, symbol: 'triangle', voice: 0 },
+    { id: 'hihat_open', name: 'Hihat Op', icon: Circle, color: 'var(--pad-hat)', y: -5, symbol: 'cross_circle', voice: 0 },
+    { id: 'hihat_closed', name: 'Hihat Cl', icon: Circle, color: 'var(--pad-hat)', y: -5, symbol: 'cross', voice: 0 },
+    { id: 'clap', name: 'Clap', icon: Sparkles, color: 'var(--pad-perc)', y: 15, symbol: 'x', voice: 0 },
+    { id: 'snare', name: 'Snare', icon: Square, color: 'var(--pad-snare)', y: 15, symbol: 'circle', voice: 0 },
+    { id: 'tom_low', name: 'Tom Low', icon: Circle, color: 'var(--pad-tom)', y: 25, symbol: 'circle', voice: 0 },
+    { id: 'kick', name: 'Kick', icon: Square, color: 'var(--pad-kick)', y: 45, symbol: 'circle', voice: 1 },
 ];
 
 const DEFAULT_BPM = 110;
@@ -518,11 +518,11 @@ const NotationView = ({ grid, beats, subdiv, currentStep, mutedTracks }) => {
     };
 
     return (
-        <div className="w-full overflow-x-auto bg-slate-100 rounded-lg p-4 border border-slate-300 mb-6 shadow-inner relative">
-            <h3 className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 absolute top-2 left-4 flex items-center gap-2">
+        <div className="w-full overflow-x-auto hardware-panel p-4 mb-6 relative">
+            <h3 className="text-xs font-bold uppercase tracking-wider mb-2 absolute top-2 left-4 flex items-center gap-2" style={{ color: 'var(--lilac-ash)' }}>
                 <Music className="w-3 h-3" /> Notation View
             </h3>
-            <svg height="140" width={totalWidth} className="text-slate-800 mx-auto">
+            <svg height="140" width={totalWidth} className="mx-auto" style={{ color: 'var(--platinum)' }}>
                 {/* Stave Background */}
                 {staveLines}
 
@@ -978,27 +978,29 @@ export default function App() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-900 text-slate-100 font-sans selection:bg-cyan-500 selection:text-white pb-20">
+        <div className="min-h-screen font-sans pb-20" style={{ backgroundColor: 'var(--bg-main)', color: 'var(--text-primary)' }}>
             {/* Header */}
-            <header className="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-30 shadow-lg">
+            <header className="border-b p-4 sticky top-0 z-30 shadow-lg" style={{ backgroundColor: 'var(--bg-panel)', borderColor: 'rgba(255,255,255,0.1)' }}>
                 <div className="max-w-6xl mx-auto flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-cyan-500 rounded-lg shadow-cyan-500/50 shadow-md">
-                            <Volume2 className="w-6 h-6 text-white" />
+                        <div className="p-2 rounded-lg shadow-md" style={{ background: 'var(--gradient-metal)' }}>
+                            <Volume2 className="w-6 h-6 text-black" />
                         </div>
-                        <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
-                            RhythmCraft
+                        <h1 className="text-2xl font-bold tracking-widest uppercase" style={{ color: 'var(--text-primary)', textShadow: '0 0 10px rgba(255,255,255,0.5)' }}>
+                            RhythmCraft <span className="text-xs align-top opacity-50">808</span>
                         </h1>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-4 bg-slate-900/50 p-2 rounded-xl border border-slate-700/50">
+                    <div className="flex flex-wrap items-center gap-4 p-2 rounded-xl border" style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderColor: 'rgba(255,255,255,0.05)' }}>
                         {/* Play Controls */}
                         <button
                             onClick={togglePlay}
-                            className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all duration-200 transform active:scale-95 ${isPlaying
-                                ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/30 shadow-lg'
-                                : 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/30 shadow-lg'
-                                }`}
+                            className={`flex items-center gap-2 px-6 py-2 rounded-lg font-bold transition-all duration-200 transform active:scale-95 hardware-btn ${isPlaying ? 'active' : ''}`}
+                            style={{
+                                background: isPlaying ? 'var(--gradient-pad-active)' : 'var(--lilac-ash)',
+                                color: isPlaying ? 'white' : 'var(--midnight-violet)',
+                                boxShadow: isPlaying ? '0 0 15px #ff0000' : 'none'
+                            }}
                         >
                             {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                             {isPlaying ? 'STOP' : 'PLAY'}
@@ -1007,8 +1009,7 @@ export default function App() {
                         {/* AI Generator Button */}
                         <button
                             onClick={() => setShowAiModal(!showAiModal)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all duration-200 border border-purple-500/50 ${showAiModal ? 'bg-purple-500 text-white' : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20'
-                                }`}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all duration-200 hardware-btn"
                             title="Generate with AI"
                         >
                             <Sparkles className="w-4 h-4" />
@@ -1018,8 +1019,7 @@ export default function App() {
                         {/* Rudiments Button */}
                         <button
                             onClick={() => setShowRudiments(!showRudiments)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all duration-200 border border-blue-500/50 ${showRudiments ? 'bg-blue-500 text-white' : 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
-                                }`}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all duration-200 hardware-btn"
                             title="Rudiment Library"
                         >
                             <BookOpen className="w-4 h-4" />
@@ -1029,18 +1029,18 @@ export default function App() {
                         {/* MIDI Export Button */}
                         <button
                             onClick={exportMidi}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 transition-colors"
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg hardware-btn"
                             title="Export MIDI"
                         >
                             <Download className="w-4 h-4" />
                             <span className="hidden sm:inline text-xs font-bold">MIDI</span>
                         </button>
 
-                        <div className="w-px h-8 bg-slate-700 mx-2 hidden md:block"></div>
+                        <div className="w-px h-8 bg-slate-700 mx-2 hidden md:block" style={{ backgroundColor: 'var(--lilac-ash)', opacity: 0.3 }}></div>
 
                         {/* Tempo */}
                         <div className="flex flex-col">
-                            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1 flex items-center gap-1">
+                            <label className="text-[10px] uppercase tracking-wider font-semibold mb-1 flex items-center gap-1" style={{ color: 'var(--lilac-ash)' }}>
                                 <Clock className="w-3 h-3" /> BPM
                             </label>
                             <div className="flex items-center gap-2">
@@ -1050,16 +1050,17 @@ export default function App() {
                                     max="240"
                                     value={bpm}
                                     onChange={(e) => setBpm(Number(e.target.value))}
-                                    className="w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                                    className="w-24 h-2 rounded-lg appearance-none cursor-pointer"
+                                    style={{ accentColor: 'var(--silver)', background: 'var(--black)' }}
                                 />
-                                <span className="font-mono text-xl w-12 text-right text-cyan-400">{bpm}</span>
+                                <span className="font-mono text-xl w-12 text-right" style={{ color: 'var(--platinum)' }}>{bpm}</span>
                             </div>
                         </div>
 
                         {/* Swing */}
                         <div className="flex flex-col hidden sm:flex">
-                            <label className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold mb-1 flex items-center gap-2">
-                                Swing <span className="text-purple-400">{swing}%</span>
+                            <label className="text-[10px] uppercase tracking-wider font-semibold mb-1 flex items-center gap-2" style={{ color: 'var(--lilac-ash)' }}>
+                                Swing <span style={{ color: 'var(--silver)' }}>{swing}%</span>
                             </label>
                             <div className="flex items-center gap-2">
                                 <input
@@ -1069,7 +1070,8 @@ export default function App() {
                                     step="5"
                                     value={swing}
                                     onChange={(e) => setSwing(Number(e.target.value))}
-                                    className="w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                                    className="w-24 h-2 rounded-lg appearance-none cursor-pointer"
+                                    style={{ accentColor: 'var(--silver)', background: 'var(--black)' }}
                                 />
                             </div>
                         </div>
@@ -1079,8 +1081,9 @@ export default function App() {
                         {/* Reset */}
                         <button
                             onClick={clearGrid}
-                            className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-400/10 rounded-lg transition-colors"
+                            className="p-2 hardware-btn rounded-lg transition-colors"
                             title="Clear Pattern"
+                            style={{ borderColor: 'var(--lilac-ash)' }}
                         >
                             <Trash2 className="w-5 h-5" />
                         </button>
@@ -1089,13 +1092,13 @@ export default function App() {
 
                 {/* AI Modal */}
                 {showAiModal && (
-                    <div className="absolute top-full left-0 right-0 bg-slate-800 border-b border-purple-500/30 shadow-2xl z-40 animate-in slide-in-from-top-2 duration-200">
+                    <div className="absolute top-full left-0 right-0 z-40 animate-in slide-in-from-top-2 duration-200" style={{ backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--silver)', boxShadow: 'var(--shadow-panel)' }}>
                         <div className="max-w-6xl mx-auto p-6 flex flex-col md:flex-row gap-6 items-start">
                             <div className="flex-1 w-full">
-                                <h3 className="text-purple-400 font-bold flex items-center gap-2 mb-2">
+                                <h3 className="font-bold flex items-center gap-2 mb-2" style={{ color: 'var(--text-primary)' }}>
                                     <Sparkles className="w-4 h-4" /> AI Beat Generator
                                 </h3>
-                                <p className="text-slate-400 text-sm mb-4">Describe a beat and the AI will compose it for you on the current grid.</p>
+                                <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>Describe a beat and the AI will compose it for you on the current grid.</p>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
@@ -1103,19 +1106,20 @@ export default function App() {
                                         onChange={(e) => setAiPrompt(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && handleGeneratePattern()}
                                         placeholder="e.g., 'Funky 90s hip hop beat', 'Fast jazz swing', 'Aggressive techno'"
-                                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder:text-slate-600 focus:outline-none focus:border-purple-500 transition-colors"
+                                        className="flex-1 rounded-lg px-4 py-2 text-white bg-transparent border transition-colors focus:outline-none"
+                                        style={{ borderColor: 'var(--lilac-ash)', color: 'var(--text-primary)' }}
                                     />
                                     <button
                                         onClick={handleGeneratePattern}
                                         disabled={isGenerating || !aiPrompt.trim()}
-                                        className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 min-w-[120px] justify-center"
+                                        className="hardware-btn disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 min-w-[120px] justify-center"
                                     >
                                         {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
                                     </button>
                                 </div>
-                                {aiError && <p className="text-rose-400 text-sm mt-2">{aiError}</p>}
+                                {aiError && <p className="text-sm mt-2" style={{ color: '#ff4d4d' }}>{aiError}</p>}
                             </div>
-                            <button onClick={() => setShowAiModal(false)} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                            <button onClick={() => setShowAiModal(false)} className="absolute top-4 right-4 hover:text-white" style={{ color: 'var(--lilac-ash)' }}>
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -1124,13 +1128,13 @@ export default function App() {
 
                 {/* Rudiments Modal */}
                 {showRudiments && (
-                    <div className="absolute top-full left-0 right-0 bg-slate-800 border-b border-blue-500/30 shadow-2xl z-40 animate-in slide-in-from-top-2 duration-200">
+                    <div className="absolute top-full left-0 right-0 z-40 animate-in slide-in-from-top-2 duration-200" style={{ backgroundColor: 'var(--bg-panel)', borderBottom: '1px solid var(--silver)', boxShadow: 'var(--shadow-panel)' }}>
                         <div className="max-w-6xl mx-auto p-6">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-blue-400 font-bold flex items-center gap-2">
+                                <h3 className="font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
                                     <BookOpen className="w-4 h-4" /> Rudiment Library
                                 </h3>
-                                <button onClick={() => setShowRudiments(false)} className="text-slate-500 hover:text-white">
+                                <button onClick={() => setShowRudiments(false)} className="hover:text-white" style={{ color: 'var(--lilac-ash)' }}>
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
@@ -1139,17 +1143,17 @@ export default function App() {
                                     <button
                                         key={rudiment.id}
                                         onClick={() => handleLoadRudiment(rudiment)}
-                                        className="bg-slate-900 border border-slate-700 hover:border-blue-500/50 hover:bg-slate-700 p-4 rounded-xl text-left transition-all group"
+                                        className="hardware-panel p-4 rounded-xl text-left transition-all group hover:brightness-110"
                                     >
-                                        <div className="font-bold text-slate-200 group-hover:text-blue-400 mb-1">{rudiment.name}</div>
-                                        <div className="text-xs text-slate-500 mb-3">{rudiment.description}</div>
+                                        <div className="font-bold mb-1 group-hover:text-white" style={{ color: 'var(--silver)' }}>{rudiment.name}</div>
+                                        <div className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>{rudiment.description}</div>
                                         <div className="flex gap-1 flex-wrap">
                                             {rudiment.sticking.slice(0, 8).map((hand, i) => (
-                                                <span key={i} className={`text-[10px] font-mono px-1 rounded ${hand === 'R' ? 'bg-rose-500/20 text-rose-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                                                <span key={i} className={`text-[10px] font-mono px-1 rounded`} style={{ backgroundColor: hand === 'R' ? 'rgba(255, 77, 77, 0.2)' : 'rgba(128, 128, 128, 0.2)', color: hand === 'R' ? '#ff4d4d' : 'var(--silver)' }}>
                                                     {hand}
                                                 </span>
                                             ))}
-                                            {rudiment.sticking.length > 8 && <span className="text-slate-600 text-[10px]">...</span>}
+                                            {rudiment.sticking.length > 8 && <span className="text-[10px]" style={{ color: 'var(--lilac-ash)' }}>...</span>}
                                         </div>
                                     </button>
                                 ))}
@@ -1163,48 +1167,52 @@ export default function App() {
             <main className="max-w-6xl mx-auto p-4 space-y-8">
 
                 {/* Time Signature Settings */}
-                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50 backdrop-blur-sm">
+                <div className="hardware-panel rounded-xl p-6 backdrop-blur-sm">
                     <div className="flex flex-col sm:flex-row gap-8 justify-center items-center">
                         <div className="flex flex-col items-center gap-3">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Beats per Bar</span>
-                            <div className="flex items-center gap-3 bg-slate-900 p-1 rounded-lg border border-slate-700">
+                            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--lilac-ash)' }}>Beats per Bar</span>
+                            <div className="flex items-center gap-3 p-1 rounded-lg border" style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderColor: 'rgba(255,255,255,0.05)' }}>
                                 <button
                                     onClick={() => setBeats(Math.max(2, beats - 1))}
-                                    className="p-2 hover:bg-slate-800 rounded-md text-cyan-500 transition-colors"
+                                    className="p-2 hover:bg-white/5 rounded-md transition-colors"
+                                    style={{ color: 'var(--silver)' }}
                                 ><Minus className="w-4 h-4" /></button>
-                                <span className="text-2xl font-mono font-bold w-8 text-center">{beats}</span>
+                                <span className="text-2xl font-mono font-bold w-8 text-center" style={{ color: 'var(--platinum)' }}>{beats}</span>
                                 <button
                                     onClick={() => setBeats(Math.min(8, beats + 1))}
-                                    className="p-2 hover:bg-slate-800 rounded-md text-cyan-500 transition-colors"
+                                    className="p-2 hover:bg-white/5 rounded-md transition-colors"
+                                    style={{ color: 'var(--silver)' }}
                                 ><Plus className="w-4 h-4" /></button>
                             </div>
                         </div>
 
-                        <div className="text-slate-600 font-light hidden sm:block">×</div>
+                        <div className="font-light hidden sm:block" style={{ color: 'var(--lilac-ash)' }}>×</div>
 
                         <div className="flex flex-col items-center gap-3">
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Subdivisions</span>
-                            <div className="flex items-center gap-3 bg-slate-900 p-1 rounded-lg border border-slate-700">
+                            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--lilac-ash)' }}>Subdivisions</span>
+                            <div className="flex items-center gap-3 p-1 rounded-lg border" style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderColor: 'rgba(255,255,255,0.05)' }}>
                                 <button
                                     onClick={() => setSubdiv(Math.max(2, subdiv - 1))}
-                                    className="p-2 hover:bg-slate-800 rounded-md text-purple-500 transition-colors"
+                                    className="p-2 hover:bg-white/5 rounded-md transition-colors"
+                                    style={{ color: 'var(--silver)' }}
                                 ><Minus className="w-4 h-4" /></button>
-                                <span className="text-2xl font-mono font-bold w-8 text-center">{subdiv}</span>
+                                <span className="text-2xl font-mono font-bold w-8 text-center" style={{ color: 'var(--platinum)' }}>{subdiv}</span>
                                 <button
                                     onClick={() => setSubdiv(Math.min(8, subdiv + 1))}
-                                    className="p-2 hover:bg-slate-800 rounded-md text-purple-500 transition-colors"
+                                    className="p-2 hover:bg-white/5 rounded-md transition-colors"
+                                    style={{ color: 'var(--silver)' }}
                                 ><Plus className="w-4 h-4" /></button>
                             </div>
                         </div>
 
-                        <div className="sm:ml-8 flex flex-col text-sm text-slate-400 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                        <div className="sm:ml-8 flex flex-col text-sm p-3 rounded-lg border" style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderColor: 'rgba(255,255,255,0.05)', color: 'var(--lilac-ash)' }}>
                             <div className="flex justify-between gap-4">
                                 <span>Total Steps:</span>
                                 <span className="font-mono text-white">{totalSteps}</span>
                             </div>
                             <div className="flex justify-between gap-4">
                                 <span>Signature Hint:</span>
-                                <span className="font-mono text-cyan-400">
+                                <span className="font-mono" style={{ color: 'var(--silver)' }}>
                                     {beats}/{subdiv === 4 ? '4' : subdiv === 3 ? '8 (Triplet)' : 'x'}
                                 </span>
                             </div>
@@ -1219,7 +1227,7 @@ export default function App() {
 
                 {/* Sequencer Grid */}
                 <div className="overflow-x-auto pb-4">
-                    <div className="min-w-[800px] bg-slate-800 rounded-xl p-6 shadow-xl border border-slate-700 relative">
+                    <div className="min-w-[800px] hardware-panel p-6 relative">
 
                         {/* Step Indicators */}
                         <div className="flex mb-2 relative z-10 gap-4">
@@ -1227,14 +1235,18 @@ export default function App() {
                             <div className="flex-1 flex gap-1">
                                 {Array(totalSteps).fill(0).map((_, i) => {
                                     const isBeatStart = i % subdiv === 0;
-                                    const beatBorder = isBeatStart ? 'border-l-2 border-l-slate-600' : 'border-l-2 border-l-transparent';
+                                    const beatBorder = isBeatStart ? 'border-l-2' : 'border-l-2 border-l-transparent';
                                     return (
                                         <div
                                             key={i}
                                             className={`flex-1 h-2 rounded-full transition-all duration-75 ${beatBorder} ${currentStep === i
-                                                ? 'bg-rose-500 shadow-[0_0_10px_#f43f5e] scale-110 ring-1 ring-white'
-                                                : isBeatStart ? 'bg-slate-600' : 'bg-slate-700'
+                                                ? 'shadow-[0_0_10px_#ff4d4d] scale-110 ring-1 ring-white'
+                                                : ''
                                                 }`}
+                                            style={{
+                                                backgroundColor: currentStep === i ? '#ff4d4d' : (isBeatStart ? 'var(--lilac-ash)' : 'rgba(255,255,255,0.1)'),
+                                                borderColor: isBeatStart ? 'var(--lilac-ash)' : 'transparent'
+                                            }}
                                         ></div>
                                     )
                                 })}
@@ -1248,14 +1260,15 @@ export default function App() {
                                     <div className="w-32 shrink-0 flex items-center gap-2">
                                         <button
                                             onClick={() => toggleMute(instIdx)}
-                                            className={`p-1.5 rounded-md transition-colors ${mutedTracks[instIdx] ? 'bg-slate-700 text-slate-400 hover:bg-slate-600' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'}`}
+                                            className={`p-1.5 rounded-md transition-colors hardware-btn ${mutedTracks[instIdx] ? 'active' : ''}`}
                                             title={mutedTracks[instIdx] ? "Unmute" : "Mute"}
+                                            style={{ borderColor: 'transparent', background: mutedTracks[instIdx] ? 'var(--lilac-ash)' : 'transparent', color: mutedTracks[instIdx] ? 'var(--bg-main)' : 'var(--lilac-ash)' }}
                                         >
                                             {mutedTracks[instIdx] ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                                         </button>
 
-                                        <div className={`w-2 h-8 rounded-full ${instruments[instIdx].color} shadow-lg shadow-black/50`}></div>
-                                        <span className="font-bold text-slate-300 uppercase text-xs tracking-wider truncate">
+                                        <div className={`w-2 h-8 rounded-full shadow-lg shadow-black/50`} style={{ backgroundColor: instruments[instIdx].color }}></div>
+                                        <span className="font-bold uppercase text-xs tracking-wider truncate" style={{ color: 'var(--platinum)' }}>
                                             {instruments[instIdx].name}
                                         </span>
                                     </div>
@@ -1264,44 +1277,51 @@ export default function App() {
                                     <div className="flex-1 flex gap-1">
                                         {row.map((isActive, stepIdx) => {
                                             const isBeatStart = stepIdx % subdiv === 0;
-                                            const beatBorder = isBeatStart ? 'border-l-2 border-l-slate-600' : '';
+                                            const beatBorder = isBeatStart ? 'border-l-2' : '';
                                             const isPlayingStep = currentStep === stepIdx;
+                                            // Determine display color based on R/L or instrument color
+                                            let activeColor = instruments[instIdx].color;
+                                            let content = null;
+
+                                            if (isActive && activeRudiment && instruments[instIdx].id === 'snare') {
+                                                const stick = activeRudiment.sticking[stepIdx % activeRudiment.sticking.length];
+                                                if (stick) {
+                                                    activeColor = stick === 'L' ? 'var(--rudiment-l)' : 'var(--rudiment-r)';
+                                                    content = <span className="text-xl font-black text-white">{stick}</span>;
+                                                }
+                                            } else if (isActive) {
+                                                content = <div className={`w-2 h-2 bg-white/80 rounded-full blur-[1px] ${isPlayingStep ? 'scale-150' : ''}`}></div>;
+                                            }
 
                                             return (
                                                 <button
                                                     key={stepIdx}
                                                     onClick={() => toggleCell(instIdx, stepIdx)}
                                                     className={`
-                                    grid-cell flex-1 h-12 rounded-md transition-all duration-75 relative
+                                    grid-cell flex-1 h-12 rounded-md transition-all duration-75 relative hardware-pad
                                     ${beatBorder}
-                                    ${/* Base State */ ''}
-                                    ${isActive
-                                                            ? `${instruments[instIdx].color} shadow-lg scale-95 hover:brightness-110`
-                                                            : 'bg-slate-700/50 hover:bg-slate-700'
-                                                        }
-                                    ${/* Playhead Highlight (Cell Highlighting) */ ''}
-                                    ${isPlayingStep
-                                                            ? isActive
-                                                                ? 'brightness-150 ring-2 ring-white z-20 shadow-[0_0_15px_rgba(255,255,255,0.5)]'
-                                                                : 'bg-white/10 ring-1 ring-white/30 z-10'
-                                                            : ''
-                                                        }
+                                    ${isActive ? 'active' : ''}
                                 `}
+                                                    style={{
+                                                        borderColor: isBeatStart ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                                        // Playhead Logic: Highlighting the column
+                                                        background: isActive
+                                                            ? `radial-gradient(circle at center, ${activeColor}, #550000)`
+                                                            : isPlayingStep
+                                                                ? 'var(--midnight-violet)' // Dim highlight for empty cells in playing column
+                                                                : 'var(--gradient-pad-inactive)',
+                                                        boxShadow: isActive
+                                                            ? (isPlayingStep ? `0 0 15px ${activeColor}` : 'var(--shadow-pad-pressed)')
+                                                            : isPlayingStep
+                                                                ? 'inset 0 0 10px rgba(255,255,255,0.1)' // Subtle glow for playhead
+                                                                : 'var(--shadow-pad)',
+                                                        transform: isActive ? 'translateY(1px)' : 'none',
+                                                        opacity: isPlayingStep ? 1 : (isActive ? 1 : 0.8) // Slightly dim inactive columns
+                                                    }}
                                                 >
                                                     {isActive && (
-                                                        <div className={`absolute inset-0 flex items-center justify-center ${activeRudiment && instruments[instIdx].id === 'snare'
-                                                            ? activeRudiment.sticking[stepIdx % activeRudiment.sticking.length] === 'R'
-                                                                ? 'bg-rose-500'
-                                                                : 'bg-cyan-500'
-                                                            : ''
-                                                            } rounded-md`}>
-                                                            {activeRudiment && instruments[instIdx].id === 'snare' ? (
-                                                                <span className="text-xl font-black text-white">
-                                                                    {activeRudiment.sticking[stepIdx % activeRudiment.sticking.length]}
-                                                                </span>
-                                                            ) : (
-                                                                <div className={`w-2 h-2 bg-white/80 rounded-full blur-[1px] ${isPlayingStep ? 'scale-150' : ''}`}></div>
-                                                            )}
+                                                        <div className={`absolute inset-0 flex items-center justify-center rounded-md`}>
+                                                            {content}
                                                         </div>
                                                     )}
                                                 </button>
@@ -1319,26 +1339,26 @@ export default function App() {
                     {instruments.map((inst, i) => (
                         <div
                             key={inst.id}
-                            className={`bg-slate-800 rounded-xl p-4 flex flex-col items-center gap-2 border border-slate-700 transition-all duration-75 ${mutedTracks[i] ? 'opacity-40 grayscale' : ''}`}
+                            className={`hardware-panel p-4 flex flex-col items-center gap-2 transition-all duration-75 ${mutedTracks[i] ? 'opacity-40 grayscale' : ''}`}
                             style={{
                                 transform: grid[i][currentStep] && isPlaying && !mutedTracks[i] ? 'scale(1.05) translateY(-4px)' : 'scale(1)',
-                                borderColor: grid[i][currentStep] && isPlaying && !mutedTracks[i] ? 'rgba(255,255,255,0.5)' : 'rgba(51,65,85,0.5)',
-                                boxShadow: grid[i][currentStep] && isPlaying && !mutedTracks[i] ? `0 10px 30px -10px ${inst.color.replace('bg-', 'var(--tw-shadow-color)')}` : 'none'
+                                borderColor: grid[i][currentStep] && isPlaying && !mutedTracks[i] ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.05)',
+                                boxShadow: grid[i][currentStep] && isPlaying && !mutedTracks[i] ? `0 10px 30px -10px ${inst.color}` : 'var(--shadow-panel)'
                             }}
                         >
                             <div
-                                className={`w-12 h-12 rounded-full ${inst.color} transition-opacity duration-75 flex items-center justify-center shadow-inner`}
-                                style={{ opacity: getVisualizerOpacity(i) }}
+                                className={`w-12 h-12 rounded-full transition-opacity duration-75 flex items-center justify-center shadow-inner`}
+                                style={{ opacity: getVisualizerOpacity(i), backgroundColor: inst.color }}
                             >
                                 <div className="w-8 h-8 rounded-full border-2 border-white/20"></div>
                             </div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase truncate w-full text-center">{inst.name}</span>
+                            <span className="text-[10px] font-bold uppercase truncate w-full text-center" style={{ color: 'var(--lilac-ash)' }}>{inst.name}</span>
                         </div>
                     ))}
                 </div>
 
                 {/* Instructions */}
-                <div className="bg-slate-800/30 border border-slate-700/30 rounded-lg p-4 text-sm text-slate-400 text-center">
+                <div className="hardware-panel p-4 text-sm text-center" style={{ color: 'var(--text-secondary)' }}>
                     <p>Tip: Use the <strong>Swing</strong> slider to add a "human" groove. 0% is straight robotic timing, 16-20% is a light groove, 50% is a full shuffle.</p>
                 </div>
 
