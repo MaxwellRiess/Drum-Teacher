@@ -3,7 +3,8 @@ import { useDrumMachine, RUDIMENTS } from '../hooks/useDrumMachine';
 import { useAiDrummer } from '../hooks/useAiDrummer';
 import { NotationView } from '../components/NotationView';
 import { exportMidi } from '../utils/midiExport';
-import { Play, Pause, X, Music, Sparkles, Download, Terminal, ChevronDown } from 'lucide-react';
+import { Play, Pause, X, Music, Sparkles, Download, Terminal, ChevronDown, Link } from 'lucide-react';
+import { encodeState, decodeState } from '../utils/patternUrl';
 
 // Accent color shown when the playhead hits an active pad
 const ACCENT = '#f43f5e'; // rose-500
@@ -12,10 +13,31 @@ export default function Design1() {
     const machine = useDrumMachine();
     const ai = useAiDrummer(machine.totalSteps, machine.setGrid);
     const [showRudiments, setShowRudiments] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     // Keep a ref to togglePlay so the keydown listener never goes stale
     const togglePlayRef = useRef(machine.togglePlay);
     useEffect(() => { togglePlayRef.current = machine.togglePlay; }, [machine.togglePlay]);
+
+    // Load state from URL on mount
+    useEffect(() => {
+        const state = decodeState(window.location.search);
+        if (state) machine.loadState(state);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleShare = () => {
+        const url = encodeState({
+            bpm: machine.bpm,
+            beats: machine.beats,
+            subdiv: machine.subdiv,
+            swing: machine.swing,
+            grid: machine.grid,
+        });
+        navigator.clipboard.writeText(url).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+        });
+    };
 
     // Spacebar always plays / pauses (except when typing in a form element)
     useEffect(() => {
@@ -69,6 +91,12 @@ export default function Design1() {
                     className="h-10 px-3 border-2 border-black flex items-center gap-2 text-sm font-bold hover:bg-black hover:text-white transition-colors"
                 >
                     <Download size={14} /> MIDI
+                </button>
+                <button
+                    onClick={handleShare}
+                    className={`h-10 px-3 border-2 border-black flex items-center gap-2 text-sm font-bold transition-colors ${copied ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                >
+                    <Link size={14} /> {copied ? 'COPIED!' : 'SHARE'}
                 </button>
 
                 <div className="w-px h-8 bg-black flex-shrink-0" />
@@ -131,7 +159,7 @@ export default function Design1() {
 
                 {/* Step number header */}
                 <div className="flex flex-shrink-0 mb-1">
-                    <div className="w-24 flex-shrink-0" />
+                    <div className="w-28 flex-shrink-0" />
                     <div className="flex-1 flex gap-0.5">
                         {Array.from({ length: machine.totalSteps }).map((_, i) => (
                             <div
@@ -152,14 +180,22 @@ export default function Design1() {
                         <div key={inst.id} className="flex flex-1 min-h-0">
 
                             {/* Label */}
-                            <div className="w-24 flex-shrink-0 flex items-center gap-1.5 pr-2 border-r-2 border-black">
+                            <div className="w-28 flex-shrink-0 flex items-center gap-1.5 pr-2 border-r-2 border-black">
                                 <div
                                     className="w-1 flex-shrink-0 self-stretch"
                                     style={{ backgroundColor: machine.grid[instIdx].some(s => s) ? '#000' : '#d1d5db' }}
                                 />
-                                <span className="font-bold text-[10px] tracking-tight uppercase truncate leading-none">
+                                <span className="font-bold text-[10px] tracking-tight uppercase truncate leading-none flex-1 min-w-0">
                                     {inst.name}
                                 </span>
+                                <button
+                                    onClick={() => machine.toggleMute(instIdx)}
+                                    title={machine.mutedTracks[instIdx] ? 'Unmute' : 'Mute'}
+                                    className={`flex-shrink-0 w-5 h-5 border border-black text-[8px] font-black flex items-center justify-center transition-colors
+                                        ${machine.mutedTracks[instIdx] ? 'bg-black text-white' : 'hover:bg-gray-200'}`}
+                                >
+                                    M
+                                </button>
                             </div>
 
                             {/* Step cells */}

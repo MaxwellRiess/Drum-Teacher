@@ -413,6 +413,14 @@ export const useDrumMachine = () => {
         setActiveRudiment(null);
     };
 
+    const loadState = ({ bpm: newBpm, beats: newBeats, subdiv: newSubdiv, swing: newSwing, grid: newGrid }) => {
+        setBpm(newBpm);
+        setBeats(newBeats);
+        setSubdiv(newSubdiv);
+        setSwing(newSwing);
+        setGrid(newGrid);
+    };
+
     const loadRudiment = (rudiment) => {
         const newGrid = instruments.map(() => Array(totalSteps).fill(false));
         const snareIndex = instruments.findIndex(i => i.id === 'snare');
@@ -438,6 +446,7 @@ export const useDrumMachine = () => {
         mutedTracks, toggleMute,
         grid, setGrid, toggleCell, clearGrid,
         loadRudiment, activeRudiment,
+        loadState,
         totalSteps,
         instruments
     };
