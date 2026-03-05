@@ -9,6 +9,10 @@ import { encodeState, decodeState } from '../utils/patternUrl';
 // Accent color shown when the playhead hits an active pad
 const ACCENT = '#f43f5e'; // rose-500
 
+// Musically meaningful subdivision values and their display labels
+const SUBDIV_VALUES = [2, 3, 4, 6, 8];
+const SUBDIV_LABELS = { 2: '8ths', 3: '8×3', 4: '16ths', 6: '16×3', 8: '32nds' };
+
 export default function Design1() {
     const machine = useDrumMachine();
     const ai = useAiDrummer(machine.totalSteps, machine.setGrid);
@@ -128,9 +132,9 @@ export default function Design1() {
 
                 <div className="flex items-center gap-1.5">
                     <span className="text-xs font-bold uppercase text-gray-500">SUBDIV</span>
-                    <button onClick={() => machine.setSubdiv(Math.max(2, machine.subdiv - 1))} className="w-6 h-7 border border-black text-sm font-bold flex items-center justify-center hover:bg-black hover:text-white transition-colors">−</button>
-                    <span className="w-5 text-center font-bold text-base">{machine.subdiv}</span>
-                    <button onClick={() => machine.setSubdiv(Math.min(8, machine.subdiv + 1))} className="w-6 h-7 border border-black text-sm font-bold flex items-center justify-center hover:bg-black hover:text-white transition-colors">+</button>
+                    <button onClick={() => { const i = SUBDIV_VALUES.indexOf(machine.subdiv); machine.setSubdiv(SUBDIV_VALUES[Math.max(0, i - 1)]); }} className="w-6 h-7 border border-black text-sm font-bold flex items-center justify-center hover:bg-black hover:text-white transition-colors">−</button>
+                    <span className="w-12 text-center font-bold text-[9px] uppercase tracking-tight">{SUBDIV_LABELS[machine.subdiv] ?? machine.subdiv}</span>
+                    <button onClick={() => { const i = SUBDIV_VALUES.indexOf(machine.subdiv); machine.setSubdiv(SUBDIV_VALUES[Math.min(SUBDIV_VALUES.length - 1, i + 1)]); }} className="w-6 h-7 border border-black text-sm font-bold flex items-center justify-center hover:bg-black hover:text-white transition-colors">+</button>
                 </div>
 
             </div>
