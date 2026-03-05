@@ -12,7 +12,7 @@ const INST_KEY = {
     kick:         'f/4',
 };
 
-const HAND_IDS = new Set(['metronome', 'hihat_open', 'hihat_closed', 'clap', 'snare', 'tom_low']);
+const HAND_IDS = new Set(['hihat_open', 'hihat_closed', 'clap', 'snare', 'tom_low']);
 const FEET_IDS = new Set(['kick']);
 const KEY_PRIORITY = ['b/5/x', 'a/5/x3', 'a/5/x', 'e/5/x', 'c/5', 'a/4', 'f/4'];
 

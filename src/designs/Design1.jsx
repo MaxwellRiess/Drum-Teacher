@@ -65,7 +65,7 @@ export default function Design1() {
 
                 <button
                     onClick={machine.togglePlay}
-                    className={`h-10 w-10 border-2 border-black flex items-center justify-center flex-shrink-0 transition-colors ${machine.isPlaying ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                    className={`h-10 w-10 border-2 flex items-center justify-center flex-shrink-0 transition-colors ${machine.isPlaying ? 'bg-[#f43f5e] border-[#f43f5e] text-white' : 'border-black hover:bg-black hover:text-white'}`}
                     title={machine.isPlaying ? 'Pause' : 'Play'}
                 >
                     {machine.isPlaying ? <Pause size={16} /> : <Play size={16} />}
@@ -133,11 +133,6 @@ export default function Design1() {
                     <button onClick={() => machine.setSubdiv(Math.min(8, machine.subdiv + 1))} className="w-6 h-7 border border-black text-sm font-bold flex items-center justify-center hover:bg-black hover:text-white transition-colors">+</button>
                 </div>
 
-                <div className="ml-auto text-xs font-bold text-gray-400 whitespace-nowrap">
-                    {machine.isPlaying
-                        ? `STEP ${String(machine.currentStep + 1).padStart(2, '0')} / ${machine.totalSteps}`
-                        : 'IDLE · SPACE TO PLAY'}
-                </div>
             </div>
 
             {/* ── NOTATION (full width, fixed height) ── */}
