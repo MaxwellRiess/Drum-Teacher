@@ -16,53 +16,44 @@ const HAND_IDS = new Set(['metronome', 'hihat_open', 'hihat_closed', 'clap', 'sn
 const FEET_IDS = new Set(['kick']);
 const KEY_PRIORITY = ['b/5/x', 'a/5/x3', 'a/5/x', 'e/5/x', 'c/5', 'a/4', 'f/4'];
 
-// Build lookup table: step counts → { dur, dots } for a given subdiv
+// ── Note-value table ────────────────────────────────────────────────────────
+// Maps step counts → { dur, dots, steps } for a given subdivision.
+// One quarter note = subdiv steps.
 function buildNoteTable(subdiv) {
-    const q = subdiv; // steps per quarter note
-    const entries = [];
-
-    const add = (steps, dur, dots) => {
-        if (Number.isInteger(steps) && steps > 0) entries.push({ steps, dur, dots });
-    };
-
-    add(4 * q,        'w',   0); // whole
-    add(3 * q,        'h',   1); // dotted half
-    add(2 * q,        'h',   0); // half
-    add(1.5 * q,      'q',   1); // dotted quarter
-    add(q,            'q',   0); // quarter
-    add(0.75 * q,     '8',   1); // dotted 8th
-    add(0.5 * q,      '8',   0); // 8th
-    add(0.375 * q,    '16',  1); // dotted 16th
-    add(0.25 * q,     '16',  0); // 16th
-    add(0.125 * q,    '32',  0); // 32nd
-
-    // Deduplicate by step count (keep first), sort largest first
+    const q = subdiv;
+    const raw = [
+        [4 * q,       'w',   0],
+        [3 * q,       'h',   1],
+        [2 * q,       'h',   0],
+        [1.5 * q,     'q',   1],
+        [q,           'q',   0],
+        [0.75 * q,    '8',   1],
+        [0.5 * q,     '8',   0],
+        [0.375 * q,   '16',  1],
+        [0.25 * q,    '16',  0],
+        [0.125 * q,   '32',  0],
+    ];
     const seen = new Set();
-    return entries
-        .filter(e => { if (seen.has(e.steps)) return false; seen.add(e.steps); return true; })
+    return raw
+        .filter(([s]) => Number.isInteger(s) && s > 0 && !seen.has(s) && seen.add(s))
+        .map(([steps, dur, dots]) => ({ steps, dur, dots }))
         .sort((a, b) => b.steps - a.steps);
 }
 
-// Greedy decomposition: steps → [{dur, dots, steps}]
+// Greedy decomposition of a step count into note values.
 function stepsToValues(steps, table) {
     const result = [];
-    let remaining = steps;
-    while (remaining > 0) {
-        const entry = table.find(e => e.steps <= remaining);
-        if (!entry) {
-            // Fallback: smallest entry in table
-            const smallest = table[table.length - 1];
-            result.push(smallest);
-            remaining -= smallest.steps;
-        } else {
-            result.push(entry);
-            remaining -= entry.steps;
-        }
-        if (remaining < 0) break; // safety
+    let rem = steps;
+    while (rem > 0) {
+        const entry = table.find(e => e.steps <= rem) ?? table[table.length - 1];
+        result.push(entry);
+        rem -= entry.steps;
+        if (rem < 0) break;
     }
     return result;
 }
 
+// ── VexFlow helpers ──────────────────────────────────────────────────────────
 function makeNote(keys, dur, dots, stemDir) {
     const n = new StaveNote({ keys, duration: dur, stem_direction: stemDir });
     for (let i = 0; i < dots; i++) n.addModifier(new Dot(), 0);
@@ -70,39 +61,31 @@ function makeNote(keys, dur, dots, stemDir) {
 }
 
 function makeRest(dur, dots, stemDir) {
-    // 'b/4' is a neutral rest position on a percussion stave
     const n = new StaveNote({ keys: ['b/4'], duration: dur + 'r', stem_direction: stemDir });
     for (let i = 0; i < dots; i++) n.addModifier(new Dot(), 0);
     return n;
 }
 
-// Next beat boundary strictly after `step`
-function nextBeat(step, subdiv, totalSteps) {
+// First beat boundary that is strictly after `step`.
+function nextBeatBoundary(step, subdiv, totalSteps) {
     return Math.min(Math.ceil((step + 1) / subdiv) * subdiv, totalSteps);
 }
 
-/**
- * Build one VexFlow voice from a hit map.
- * Returns { tickables, stepIndex } where stepIndex maps each step to the
- * index of the tickable that covers it (for cursor tracking).
- */
+// ── Voice builder ────────────────────────────────────────────────────────────
+// Returns:
+//   tickables  – array of VexFlow Tickables (notes + rests)
+//   hitIndices – Map<step, tickableIndex> for steps that have REAL notes
+//                (used for cursor X tracking – rests are excluded)
 function buildVoice(hitMap, totalSteps, subdiv, stemDir, table) {
-    const tickables = [];
-    const stepIndex = new Map(); // step → tickable index
+    const tickables  = [];
+    const hitIndices = new Map(); // only actual sound events, not rests
 
-    const push = (tickable, startStep, stepCount) => {
-        const idx = tickables.length;
-        tickables.push(tickable);
-        for (let s = startStep; s < Math.min(startStep + stepCount, totalSteps); s++) {
-            stepIndex.set(s, idx);
-        }
-    };
+    const push = tickable => { tickables.push(tickable); return tickables.length - 1; };
 
     const addRests = (from, to) => {
-        const values = stepsToValues(to - from, table);
         let pos = from;
-        for (const { dur, dots, steps } of values) {
-            push(makeRest(dur, dots, stemDir), pos, steps);
+        for (const { dur, dots, steps } of stepsToValues(to - from, table)) {
+            push(makeRest(dur, dots, stemDir));
             pos += steps;
         }
     };
@@ -113,20 +96,15 @@ function buildVoice(hitMap, totalSteps, subdiv, stemDir, table) {
     while (i < totalSteps) {
         if (hitMap.has(i)) {
             const nextHit = hitSteps.find(s => s > i) ?? totalSteps;
+            const cap     = nextBeatBoundary(i, subdiv, totalSteps);
+            const dur     = Math.min(nextHit - i, cap - i);
+            const [{ dur: d, dots, steps }] = stepsToValues(dur, table);
 
-            // Cap note duration at the beat boundary so notes never span beats
-            const cap = nextBeat(i, subdiv, totalSteps);
-            const noteDur = Math.min(nextHit - i, cap - i);
-            const [{ dur, dots, steps }] = stepsToValues(noteDur, table);
+            const idx = push(makeNote(hitMap.get(i), d, dots, stemDir));
+            hitIndices.set(i, idx); // record ONLY actual note steps
 
-            push(makeNote(hitMap.get(i), dur, dots, stemDir), i, steps);
             i += steps;
-
-            // Fill any gap between end of note and next hit with rests
-            if (i < nextHit) {
-                addRests(i, nextHit);
-                i = nextHit;
-            }
+            if (i < nextHit) { addRests(i, nextHit); i = nextHit; }
         } else {
             const nextHit = hitSteps.find(s => s > i) ?? totalSteps;
             addRests(i, nextHit);
@@ -134,15 +112,17 @@ function buildVoice(hitMap, totalSteps, subdiv, stemDir, table) {
         }
     }
 
-    return { tickables, stepIndex };
+    return { tickables, hitIndices };
 }
 
+// ── Component ────────────────────────────────────────────────────────────────
 export const NotationView = ({ grid, beats, subdiv, currentStep, mutedTracks }) => {
-    const wrapperRef   = useRef(null);
-    const containerRef = useRef(null);
-    const cursorRef    = useRef(null);
-    const handsRef     = useRef([]);       // tickables array after draw
-    const stepIndexRef = useRef(new Map()); // step → tickable index
+    const wrapperRef    = useRef(null);
+    const containerRef  = useRef(null);
+    const cursorRef     = useRef(null);
+    // Cursor positions: one X value per step, computed from hit-note positions
+    // then forward-filled so the cursor stays at the last sounded note.
+    const stepXRef      = useRef([]);
     const svgLeftOffset = useRef(0);
 
     useEffect(() => {
@@ -159,85 +139,105 @@ export const NotationView = ({ grid, beats, subdiv, currentStep, mutedTracks }) 
 
         const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
         renderer.resize(staveWidth + 20, 180);
-        const context = renderer.getContext();
+        const ctx = renderer.getContext();
 
         const stave = new Stave(10, 30, staveWidth);
         stave.addClef('percussion');
         stave.addTimeSignature(`${beats}/4`);
-        stave.setContext(context).draw();
+        stave.setContext(ctx).draw();
 
-        // Collect hits per voice
+        // ── Collect hits per voice ───────────────────────────────────────────
         const handHits = new Map();
         const feetHits = new Map();
 
         for (let step = 0; step < totalSteps; step++) {
-            const handInsts = instruments.filter(
+            const hi = instruments.filter(
                 (inst, idx) => HAND_IDS.has(inst.id) && !mutedTracks[idx] && grid[idx]?.[step]
             );
-            if (handInsts.length > 0) {
-                const keys = [...new Set(handInsts.map(i => INST_KEY[i.id]).filter(Boolean))]
+            if (hi.length > 0) {
+                const keys = [...new Set(hi.map(i => INST_KEY[i.id]).filter(Boolean))]
                     .sort((a, b) => KEY_PRIORITY.indexOf(a) - KEY_PRIORITY.indexOf(b));
                 handHits.set(step, keys);
             }
-
-            const feetInsts = instruments.filter(
+            const fi = instruments.filter(
                 (inst, idx) => FEET_IDS.has(inst.id) && !mutedTracks[idx] && grid[idx]?.[step]
             );
-            if (feetInsts.length > 0) {
-                const keys = feetInsts.map(i => INST_KEY[i.id]).filter(Boolean);
-                feetHits.set(step, keys);
+            if (fi.length > 0)
+                feetHits.set(step, fi.map(i => INST_KEY[i.id]).filter(Boolean));
+        }
+
+        // ── Build voices ─────────────────────────────────────────────────────
+        const { tickables: hTick, hitIndices: hIdx } =
+            buildVoice(handHits, totalSteps, subdiv, 1,  table);
+        const { tickables: fTick, hitIndices: fIdx } =
+            buildVoice(feetHits, totalSteps, subdiv, -1, table);
+
+        const hVoice = new Voice({ num_beats: beats, beat_value: 4 }).setStrict(false);
+        hVoice.addTickables(hTick);
+        const fVoice = new Voice({ num_beats: beats, beat_value: 4 }).setStrict(false);
+        fVoice.addTickables(fTick);
+
+        new Formatter()
+            .joinVoices([hVoice, fVoice])
+            .format([hVoice, fVoice], staveWidth - 60);
+
+        const hBeams = Beam.applyAndGetBeams(hVoice,  1);
+        const fBeams = Beam.applyAndGetBeams(fVoice, -1);
+
+        hVoice.draw(ctx, stave);
+        fVoice.draw(ctx, stave);
+        hBeams.forEach(b => b.setContext(ctx).draw());
+        fBeams.forEach(b => b.setContext(ctx).draw());
+
+        // Track SVG left offset for cursor alignment when notation is centered
+        const svgEl = containerRef.current.querySelector('svg');
+        if (svgEl) {
+            const wr = wrapperRef.current.getBoundingClientRect();
+            const sr = svgEl.getBoundingClientRect();
+            svgLeftOffset.current = sr.left - wr.left;
+        }
+
+        // ── Cursor X positions ───────────────────────────────────────────────
+        // Only use actual hit-note positions (not rests) so the cursor doesn't
+        // jump to the special stave positions VexFlow uses for whole/half rests.
+        // Forward-fill: during a rest the cursor stays at the previous hit's X.
+        const stepX = new Array(totalSteps).fill(null);
+
+        for (const [step, idx] of hIdx) {
+            try {
+                const x = hTick[idx].getAbsoluteX();
+                if (x > 0) stepX[step] = x;
+            } catch { /* ignore */ }
+        }
+        for (const [step, idx] of fIdx) {
+            if (stepX[step] === null) {
+                try {
+                    const x = fTick[idx].getAbsoluteX();
+                    if (x > 0) stepX[step] = x;
+                } catch { /* ignore */ }
             }
         }
 
-        const { tickables: handsTick, stepIndex: handsStepIdx } =
-            buildVoice(handHits, totalSteps, subdiv, 1, table);
-        const { tickables: feetTick } =
-            buildVoice(feetHits, totalSteps, subdiv, -1, table);
-
-        const handsVoice = new Voice({ num_beats: beats, beat_value: 4 }).setStrict(false);
-        handsVoice.addTickables(handsTick);
-        const feetVoice = new Voice({ num_beats: beats, beat_value: 4 }).setStrict(false);
-        feetVoice.addTickables(feetTick);
-
-        new Formatter()
-            .joinVoices([handsVoice, feetVoice])
-            .format([handsVoice, feetVoice], staveWidth - 60);
-
-        const handsBeams = Beam.applyAndGetBeams(handsVoice, 1);
-        const feetBeams  = Beam.applyAndGetBeams(feetVoice, -1);
-
-        handsVoice.draw(context, stave);
-        feetVoice.draw(context, stave);
-        handsBeams.forEach(b => b.setContext(context).draw());
-        feetBeams.forEach(b => b.setContext(context).draw());
-
-        // Track SVG offset for cursor positioning
-        const svgEl = containerRef.current.querySelector('svg');
-        if (svgEl) {
-            const wrapperRect = wrapperRef.current.getBoundingClientRect();
-            const svgRect     = svgEl.getBoundingClientRect();
-            svgLeftOffset.current = svgRect.left - wrapperRect.left;
+        // Forward-fill through rest regions
+        let lastX = null;
+        for (let s = 0; s < totalSteps; s++) {
+            if (stepX[s] !== null) { lastX = stepX[s]; }
+            else if (lastX !== null) { stepX[s] = lastX; }
         }
 
-        handsRef.current    = handsTick;
-        stepIndexRef.current = handsStepIdx;
+        stepXRef.current = stepX;
     }, [grid, beats, subdiv, mutedTracks]);
 
-    // Cheap cursor update — no notation re-render
+    // Lightweight cursor update — no re-render of notation
     useEffect(() => {
         if (!cursorRef.current) return;
-        const idx = stepIndexRef.current.get(currentStep);
-        if (idx !== undefined) {
-            try {
-                const x = handsRef.current[idx]?.getAbsoluteX();
-                if (x > 0) {
-                    cursorRef.current.style.display = 'block';
-                    cursorRef.current.style.left = `${svgLeftOffset.current + x - 4}px`;
-                    return;
-                }
-            } catch { /* ignore */ }
+        const x = stepXRef.current[currentStep];
+        if (x) {
+            cursorRef.current.style.display = 'block';
+            cursorRef.current.style.left = `${svgLeftOffset.current + x - 4}px`;
+        } else {
+            cursorRef.current.style.display = 'none';
         }
-        cursorRef.current.style.display = 'none';
     }, [currentStep]);
 
     return (
