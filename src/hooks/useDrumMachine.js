@@ -14,7 +14,7 @@ export class DrumSynth {
         this.masterGain = null;
     }
 
-    init() {
+    async init() {
         if (!this.ctx) {
             this.ctx = createAudioContext();
             this.masterGain = this.ctx.createGain();
@@ -22,7 +22,7 @@ export class DrumSynth {
             this.masterGain.connect(this.ctx.destination);
         }
         if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
+            await this.ctx.resume();
         }
     }
 
@@ -325,9 +325,9 @@ export const useDrumMachine = () => {
         // Preview sound
         if (!isPlaying && newGrid[instrumentIndex][stepIndex] && !mutedTracks[instrumentIndex]) {
             const synth = audioRef.current;
-            synth.init();
-            const now = synth.ctx.currentTime;
-            playInstrument(instruments[instrumentIndex].id, now);
+            synth.init().then(() => {
+                playInstrument(instruments[instrumentIndex].id, synth.ctx.currentTime);
+            });
         }
     };
 
@@ -392,14 +392,14 @@ export const useDrumMachine = () => {
         };
     }, [isPlaying, totalSteps]);
 
-    const togglePlay = () => {
+    const togglePlay = async () => {
         if (isPlaying) {
             setIsPlaying(false);
             if (timerIDRef.current) clearTimeout(timerIDRef.current);
             setCurrentStep(-1);
         } else {
             const synth = audioRef.current;
-            synth.init();
+            await synth.init();
             setIsPlaying(true);
             currentStepRef.current = 0;
             nextNoteTimeRef.current = synth.ctx.currentTime + 0.05;

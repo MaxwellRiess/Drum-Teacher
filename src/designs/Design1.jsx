@@ -65,10 +65,10 @@ export default function Design1() {
 
                 <button
                     onClick={machine.togglePlay}
-                    className={`h-10 px-4 border-2 border-black font-bold text-sm flex items-center gap-2 transition-colors ${machine.isPlaying ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                    className={`h-10 w-10 border-2 border-black flex items-center justify-center flex-shrink-0 transition-colors ${machine.isPlaying ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                    title={machine.isPlaying ? 'Pause' : 'Play'}
                 >
-                    {machine.isPlaying ? <Pause size={14} /> : <Play size={14} />}
-                    {machine.isPlaying ? 'HALT' : 'EXECUTE'}
+                    {machine.isPlaying ? <Pause size={16} /> : <Play size={16} />}
                 </button>
                 <button
                     onClick={machine.clearGrid}
@@ -113,7 +113,8 @@ export default function Design1() {
                     <input
                         type="range" min="0" max="50" value={machine.swing}
                         onChange={e => machine.setSwing(Number(e.target.value))}
-                        className="w-20 h-1.5 accent-black cursor-pointer"
+                        className="w-20 h-1.5 cursor-pointer"
+                        style={{ accentColor: '#000' }}
                     />
                     <span className="w-6 text-sm font-bold tabular-nums">{machine.swing}</span>
                 </div>
