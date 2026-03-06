@@ -256,10 +256,17 @@ export const useDrumMachine = () => {
         instruments.map(() => Array(totalSteps).fill(false))
     );
 
+    // Triplet sub-row grid (always beats×3 cells)
+    const [tripletGrid, setTripletGrid] = useState(() =>
+        instruments.map(() => Array(beats * 3).fill(false))
+    );
+
     // Refs
     const gridRef = useRef(grid);
+    const tripletGridRef = useRef(tripletGrid);
     const mutedRef = useRef(mutedTracks);
     const bpmRef = useRef(bpm);
+    const subdivRef = useRef(subdiv);
     const swingRef = useRef(swing);
     const audioRef = useRef(new DrumSynth());
     const nextNoteTimeRef = useRef(0);
@@ -272,8 +279,10 @@ export const useDrumMachine = () => {
 
     // Sync Refs
     useEffect(() => { gridRef.current = grid; }, [grid]);
+    useEffect(() => { tripletGridRef.current = tripletGrid; }, [tripletGrid]);
     useEffect(() => { mutedRef.current = mutedTracks; }, [mutedTracks]);
     useEffect(() => { bpmRef.current = bpm; }, [bpm]);
+    useEffect(() => { subdivRef.current = subdiv; }, [subdiv]);
     useEffect(() => { swingRef.current = swing; }, [swing]);
     useEffect(() => { totalStepsRef.current = totalSteps; }, [totalSteps]);
 
@@ -294,11 +303,28 @@ export const useDrumMachine = () => {
     const updateBeats = (newBeats) => {
         setBeats(newBeats);
         resizeGrid(newBeats, subdiv);
+        setTripletGrid(prev => prev.map(row => {
+            const newRow = Array(newBeats * 3).fill(false);
+            for (let i = 0; i < Math.min(row.length, newBeats * 3); i++) newRow[i] = row[i];
+            return newRow;
+        }));
     };
 
     const updateSubdiv = (newSubdiv) => {
         setSubdiv(newSubdiv);
         resizeGrid(beats, newSubdiv);
+    };
+
+    const toggleTripletCell = (instrumentIndex, tripletStepIndex) => {
+        setTripletGrid(prev => {
+            const next = prev.map(r => [...r]);
+            next[instrumentIndex][tripletStepIndex] = !next[instrumentIndex][tripletStepIndex];
+            return next;
+        });
+        if (!isPlaying) {
+            const synth = audioRef.current;
+            synth.init().then(() => playInstrument(instruments[instrumentIndex].id, synth.ctx.currentTime));
+        }
     };
 
     const playInstrument = (id, time) => {
@@ -359,11 +385,23 @@ export const useDrumMachine = () => {
     };
 
     const scheduleNote = (stepNumber, time) => {
+        // Normal grid
         gridRef.current.forEach((row, instrumentIndex) => {
-            if (row[stepNumber] && !mutedRef.current[instrumentIndex]) {
+            if (row[stepNumber] && !mutedRef.current[instrumentIndex])
                 playInstrument(instruments[instrumentIndex].id, time);
-            }
         });
+        // Triplet sub-row: schedule all 3 notes for this beat at the beat boundary
+        if (stepNumber % subdivRef.current === 0) {
+            const beatIndex = Math.floor(stepNumber / subdivRef.current);
+            const beatDuration = 60.0 / bpmRef.current;
+            tripletGridRef.current.forEach((row, instrumentIndex) => {
+                if (mutedRef.current[instrumentIndex]) return;
+                for (let t = 0; t < 3; t++) {
+                    if (row[beatIndex * 3 + t])
+                        playInstrument(instruments[instrumentIndex].id, time + (t / 3) * beatDuration);
+                }
+            });
+        }
     };
 
     const scheduler = useCallback(() => {
@@ -409,16 +447,18 @@ export const useDrumMachine = () => {
 
     const clearGrid = () => {
         setGrid(instruments.map(() => Array(totalSteps).fill(false)));
+        setTripletGrid(instruments.map(() => Array(beats * 3).fill(false)));
         setMutedTracks(instruments.map(() => false));
         setActiveRudiment(null);
     };
 
-    const loadState = ({ bpm: newBpm, beats: newBeats, subdiv: newSubdiv, swing: newSwing, grid: newGrid }) => {
+    const loadState = ({ bpm: newBpm, beats: newBeats, subdiv: newSubdiv, swing: newSwing, grid: newGrid, tripletGrid: newTripletGrid }) => {
         setBpm(newBpm);
         setBeats(newBeats);
         setSubdiv(newSubdiv);
         setSwing(newSwing);
         setGrid(newGrid);
+        if (newTripletGrid) setTripletGrid(newTripletGrid);
     };
 
     const loadRudiment = (rudiment) => {
@@ -448,6 +488,7 @@ export const useDrumMachine = () => {
         loadRudiment, activeRudiment,
         loadState,
         totalSteps,
-        instruments
+        instruments,
+        tripletGrid, toggleTripletCell,
     };
 };

@@ -18,6 +18,15 @@ export default function Design1() {
     const ai = useAiDrummer(machine.totalSteps, machine.setGrid);
     const [showRudiments, setShowRudiments] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [expandedTripletRows, setExpandedTripletRows] = useState(new Set());
+
+    const toggleExpandedRow = (instIdx) => {
+        setExpandedTripletRows(prev => {
+            const next = new Set(prev);
+            next.has(instIdx) ? next.delete(instIdx) : next.add(instIdx);
+            return next;
+        });
+    };
 
     // Keep a ref to togglePlay so the keydown listener never goes stale
     const togglePlayRef = useRef(machine.togglePlay);
@@ -36,6 +45,7 @@ export default function Design1() {
             subdiv: machine.subdiv,
             swing: machine.swing,
             grid: machine.grid,
+            tripletGrid: machine.tripletGrid,
         });
         navigator.clipboard.writeText(url).then(() => {
             setCopied(true);
@@ -102,7 +112,6 @@ export default function Design1() {
                 >
                     <Link size={14} /> {copied ? 'COPIED!' : 'SHARE'}
                 </button>
-
                 <div className="w-px h-8 bg-black flex-shrink-0" />
 
                 <div className="flex items-center gap-1.5">
@@ -151,6 +160,7 @@ export default function Design1() {
                     currentStep={machine.currentStep}
                     mutedTracks={machine.mutedTracks}
                     activeRudiment={machine.activeRudiment}
+                    tripletGrid={machine.tripletGrid}
                 />
             </div>
 
@@ -176,94 +186,154 @@ export default function Design1() {
 
                 {/* Instrument rows — each expands equally to fill space */}
                 <div className="flex-1 flex flex-col min-h-0 gap-0.5">
-                    {machine.instruments.map((inst, instIdx) => (
-                        <div key={inst.id} className="flex flex-1 min-h-0">
+                    {machine.instruments.map((inst, instIdx) => {
+                        const isExpanded = expandedTripletRows.has(instIdx);
+                        const currentBeat = machine.currentStep >= 0
+                            ? Math.floor(machine.currentStep / machine.subdiv)
+                            : -1;
+                        return (
+                            <div key={inst.id} className="flex flex-col flex-1 min-h-0">
 
-                            {/* Label */}
-                            <div className="w-28 flex-shrink-0 flex items-center gap-1.5 pr-2 border-r-2 border-black">
-                                <div
-                                    className="w-1 flex-shrink-0 self-stretch"
-                                    style={{ backgroundColor: machine.grid[instIdx].some(s => s) ? '#000' : '#d1d5db' }}
-                                />
-                                <span className="font-bold text-[10px] tracking-tight uppercase truncate leading-none flex-1 min-w-0">
-                                    {inst.name}
-                                </span>
-                                <button
-                                    onClick={() => machine.toggleMute(instIdx)}
-                                    title={machine.mutedTracks[instIdx] ? 'Unmute' : 'Mute'}
-                                    className={`flex-shrink-0 w-5 h-5 border border-black text-[8px] font-black flex items-center justify-center transition-colors
-                                        ${machine.mutedTracks[instIdx] ? 'bg-black text-white' : 'hover:bg-gray-200'}`}
-                                >
-                                    M
-                                </button>
-                            </div>
+                                {/* Main row */}
+                                <div className="flex flex-1 min-h-0">
 
-                            {/* Step cells */}
-                            <div className="flex-1 flex gap-0.5 pl-0.5">
-                                {machine.grid[instIdx].map((isActive, stepIdx) => {
-                                    const isBeatStart = stepIdx % machine.subdiv === 0;
-                                    const isCurrentStep = machine.currentStep === stepIdx;
-
-                                    // R/L sticking label on snare when a rudiment is active
-                                    let sticking = null;
-                                    if (inst.id === 'snare' && machine.activeRudiment) {
-                                        sticking = machine.activeRudiment.sticking[stepIdx % machine.activeRudiment.sticking.length];
-                                    }
-
-                                    // Compute background/border inline so we can use the accent variable
-                                    let bg, border, textColor;
-                                    if (isActive && isCurrentStep) {
-                                        // Playing right now → accent highlight
-                                        bg = ACCENT;
-                                        border = ACCENT;
-                                        textColor = '#fff';
-                                    } else if (isActive) {
-                                        // Programmed but not currently playing
-                                        if (sticking === 'L') {
-                                            bg = '#737373'; // neutral-500
-                                            border = '#737373';
-                                        } else {
-                                            bg = '#000';
-                                            border = '#000';
-                                        }
-                                        textColor = '#fff';
-                                    } else if (isCurrentStep) {
-                                        // Playhead passing over empty cell
-                                        bg = '#e5e7eb';
-                                        border = '#d1d5db';
-                                        textColor = 'transparent';
-                                    } else {
-                                        bg = 'transparent';
-                                        border = isBeatStart ? '#000' : '#d1d5db';
-                                        textColor = 'transparent';
-                                    }
-
-                                    return (
+                                    {/* Label */}
+                                    <div className="w-28 flex-shrink-0 flex flex-col border-r-2 border-black">
+                                        <div className="flex flex-1 items-center gap-1.5 pr-2">
+                                            <div
+                                                className="w-1 flex-shrink-0 self-stretch"
+                                                style={{ backgroundColor: machine.grid[instIdx].some(s => s) ? '#000' : '#d1d5db' }}
+                                            />
+                                            <span className="font-bold text-[10px] tracking-tight uppercase truncate leading-none flex-1 min-w-0">
+                                                {inst.name}
+                                            </span>
+                                            <button
+                                                onClick={() => machine.toggleMute(instIdx)}
+                                                title={machine.mutedTracks[instIdx] ? 'Unmute' : 'Mute'}
+                                                className={`flex-shrink-0 w-5 h-5 border border-black text-[8px] font-black flex items-center justify-center transition-colors
+                                                    ${machine.mutedTracks[instIdx] ? 'bg-black text-white' : 'hover:bg-gray-200'}`}
+                                            >
+                                                M
+                                            </button>
+                                        </div>
+                                        {/* Expand toggle */}
                                         <button
-                                            key={stepIdx}
-                                            onMouseDown={() => machine.toggleCell(instIdx, stepIdx)}
-                                            disabled={machine.mutedTracks[instIdx]}
-                                            className={`flex-1 flex items-center justify-center text-[10px] font-black transition-colors duration-75
-                                                ${isBeatStart ? 'border-l-2' : 'border-l'}
-                                                ${machine.mutedTracks[instIdx] ? 'opacity-25 cursor-not-allowed' : ''}
-                                                ${!isActive && !isCurrentStep ? 'hover:bg-gray-200' : ''}
-                                            `}
-                                            style={{
-                                                backgroundColor: bg,
-                                                borderColor: border,
-                                                borderTopWidth: '1px',
-                                                borderBottomWidth: '1px',
-                                                borderRightWidth: '1px',
-                                                color: textColor,
-                                            }}
+                                            onClick={() => toggleExpandedRow(instIdx)}
+                                            className={`border-t-2 flex items-center justify-center gap-0.5 px-1 flex-shrink-0 hover:bg-indigo-50 transition-colors ${isExpanded ? 'border-indigo-300 bg-indigo-50 text-indigo-500' : 'border-gray-300 text-gray-400'}`}
+                                            style={{ minHeight: '14px' }}
+                                            title="Toggle triplet sub-row"
                                         >
-                                            {isActive && sticking && <span>{sticking}</span>}
+                                            <span className="text-[8px] font-bold leading-none">×3</span>
+                                            <ChevronDown size={9} className={`transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                                         </button>
-                                    );
-                                })}
+                                    </div>
+
+                                    {/* Step cells */}
+                                    <div className="flex-1 flex gap-0.5 pl-0.5">
+                                        {machine.grid[instIdx].map((isActive, stepIdx) => {
+                                            const isBeatStart = stepIdx % machine.subdiv === 0;
+                                            const isCurrentStep = machine.currentStep === stepIdx;
+
+                                            // R/L sticking label on snare when a rudiment is active
+                                            let sticking = null;
+                                            if (inst.id === 'snare' && machine.activeRudiment) {
+                                                sticking = machine.activeRudiment.sticking[stepIdx % machine.activeRudiment.sticking.length];
+                                            }
+
+                                            let bg, border, textColor;
+                                            if (isActive && isCurrentStep) {
+                                                bg = ACCENT; border = ACCENT; textColor = '#fff';
+                                            } else if (isActive) {
+                                                if (sticking === 'L') { bg = '#737373'; border = '#737373'; }
+                                                else { bg = '#000'; border = '#000'; }
+                                                textColor = '#fff';
+                                            } else if (isCurrentStep) {
+                                                bg = '#e5e7eb'; border = '#d1d5db'; textColor = 'transparent';
+                                            } else {
+                                                bg = 'transparent';
+                                                border = isBeatStart ? '#000' : '#d1d5db';
+                                                textColor = 'transparent';
+                                            }
+
+                                            return (
+                                                <button
+                                                    key={stepIdx}
+                                                    onMouseDown={() => machine.toggleCell(instIdx, stepIdx)}
+                                                    disabled={machine.mutedTracks[instIdx]}
+                                                    className={`flex-1 relative flex items-center justify-center text-[10px] font-black transition-colors duration-75
+                                                        ${isBeatStart ? 'border-l-2' : 'border-l'}
+                                                        ${machine.mutedTracks[instIdx] ? 'opacity-25 cursor-not-allowed' : ''}
+                                                        ${!isActive && !isCurrentStep ? 'hover:bg-gray-200' : ''}
+                                                    `}
+                                                    style={{
+                                                        backgroundColor: bg,
+                                                        borderColor: border,
+                                                        borderTopWidth: '1px',
+                                                        borderBottomWidth: '1px',
+                                                        borderRightWidth: '1px',
+                                                        color: textColor,
+                                                    }}
+                                                >
+                                                    {isActive && sticking && <span>{sticking}</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Triplet sub-row */}
+                                {isExpanded && (
+                                    <div className="flex flex-1 min-h-0">
+                                        {/* Triplet label */}
+                                        <div className="w-28 flex-shrink-0 flex items-center gap-1.5 pr-2 border-r-2 border-black">
+                                            <div className="w-1 flex-shrink-0 self-stretch" style={{ backgroundColor: '#818cf8' }} />
+                                            <span className="font-bold text-[10px] tracking-tight uppercase truncate leading-none flex-1 min-w-0 text-indigo-400">
+                                                ×3
+                                            </span>
+                                        </div>
+                                        {/* Triplet cells */}
+                                        <div className="flex-1 flex gap-0.5 pl-0.5">
+                                            {machine.tripletGrid[instIdx].map((isActive, tStepIdx) => {
+                                                const isBeatStart = tStepIdx % 3 === 0;
+                                                const isCurrentBeat = Math.floor(tStepIdx / 3) === currentBeat;
+
+                                                let bg, border;
+                                                if (isActive) {
+                                                    bg = '#4f46e5'; border = '#4f46e5';
+                                                } else if (isCurrentBeat) {
+                                                    bg = '#e0e7ff';
+                                                    border = isBeatStart ? '#818cf8' : '#e0e7ff';
+                                                } else {
+                                                    bg = '#f5f3ff';
+                                                    border = isBeatStart ? '#818cf8' : '#e0e7ff';
+                                                }
+
+                                                return (
+                                                    <button
+                                                        key={tStepIdx}
+                                                        onMouseDown={() => machine.toggleTripletCell(instIdx, tStepIdx)}
+                                                        disabled={machine.mutedTracks[instIdx]}
+                                                        className={`flex-1 transition-colors duration-75
+                                                            ${isBeatStart ? 'border-l-2' : 'border-l'}
+                                                            ${machine.mutedTracks[instIdx] ? 'opacity-25 cursor-not-allowed' : ''}
+                                                            ${!isActive ? 'hover:bg-indigo-200' : ''}
+                                                        `}
+                                                        style={{
+                                                            backgroundColor: bg,
+                                                            borderColor: border,
+                                                            borderTopWidth: '1px',
+                                                            borderBottomWidth: '1px',
+                                                            borderRightWidth: '1px',
+                                                        }}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
