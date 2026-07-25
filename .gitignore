@@ -123,3 +123,7 @@ dist-ssr
 
 # OS X
 .DS_Store
+
+# Local scratch: pre-refactor snapshot and saved Claude Code transcripts
+App_original.jsx
+20*-*-*-*.txt

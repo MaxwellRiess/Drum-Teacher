@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { Renderer, Stave, StaveNote, Voice, Formatter, Beam, Dot, Tuplet } from 'vexflow';
 // Tuplet kept for triplet-subdiv rendering
 import { instruments } from '../hooks/useDrumMachine';
+import { VERDICT_COLOURS } from '../utils/scoring';
 
 const INST_KEY = {
     metronome:    'b/5/x',
@@ -206,12 +207,35 @@ function buildTripletVoice(hitMap, totalSteps, subdiv, stemDir, restKey = 'b/4')
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
-export const NotationView = ({ grid, beats, subdiv, currentStep, mutedTracks, tripletGrid = null }) => {
+export const NotationView = ({
+    grid, beats, subdiv, currentStep, mutedTracks, tripletGrid = null, cellScores = null,
+}) => {
     const wrapperRef    = useRef(null);
     const containerRef  = useRef(null);
     const cursorRef     = useRef(null);
     const stepXRef      = useRef([]);
     const svgLeftOffset = useRef(0);
+
+    // Maps "s<step>:<instrumentIndex>" to the notehead's SVG element, so
+    // practice verdicts can recolour individual noteheads directly rather than
+    // forcing a full VexFlow re-render every time a score lands.
+    const noteElsRef     = useRef(new Map());
+    const cellScoresRef  = useRef(cellScores);
+    cellScoresRef.current = cellScores;
+
+    const applyScoreColours = () => {
+        const scores = cellScoresRef.current;
+        for (const [key, paths] of noteElsRef.current) {
+            const verdict = scores?.[key]?.verdict;
+            const colour = verdict ? VERDICT_COLOURS[verdict] : '';
+            // The glyph paths carry their own fill attribute, so the colour has
+            // to go on them as an inline style rather than on the parent group.
+            for (const path of paths) {
+                path.style.fill = colour;
+                path.style.stroke = colour;
+            }
+        }
+    };
 
     useEffect(() => {
         if (!containerRef.current || !wrapperRef.current) return;
@@ -236,23 +260,38 @@ export const NotationView = ({ grid, beats, subdiv, currentStep, mutedTracks, tr
         stave.setContext(ctx).draw();
 
         // ── Collect hits ─────────────────────────────────────────────────────
+        // Alongside the note keys we keep the instrument index that produced
+        // each one, in the same order, so a notehead can be traced back to its
+        // track for practice-mode colouring.
         const handHits = new Map();
         const feetHits = new Map();
+        const handOwners = new Map();
+        const feetOwners = new Map();
+
+        const collect = (idSet, step) => {
+            const seen = new Map(); // note key → instrument index
+            instruments.forEach((inst, idx) => {
+                if (!idSet.has(inst.id) || mutedTracks[idx] || !grid[idx]?.[step]) return;
+                const key = INST_KEY[inst.id];
+                if (key && !seen.has(key)) seen.set(key, idx);
+            });
+            if (seen.size === 0) return null;
+            const keys = [...seen.keys()]
+                .sort((a, b) => KEY_PRIORITY.indexOf(a) - KEY_PRIORITY.indexOf(b));
+            return { keys, owners: keys.map(k => seen.get(k)) };
+        };
 
         for (let step = 0; step < totalSteps; step++) {
-            const hi = instruments.filter(
-                (inst, idx) => HAND_IDS.has(inst.id) && !mutedTracks[idx] && grid[idx]?.[step]
-            );
-            if (hi.length > 0) {
-                const keys = [...new Set(hi.map(i => INST_KEY[i.id]).filter(Boolean))]
-                    .sort((a, b) => KEY_PRIORITY.indexOf(a) - KEY_PRIORITY.indexOf(b));
-                handHits.set(step, keys);
+            const hands = collect(HAND_IDS, step);
+            if (hands) {
+                handHits.set(step, hands.keys);
+                handOwners.set(step, hands.owners);
             }
-            const fi = instruments.filter(
-                (inst, idx) => FEET_IDS.has(inst.id) && !mutedTracks[idx] && grid[idx]?.[step]
-            );
-            if (fi.length > 0)
-                feetHits.set(step, fi.map(i => INST_KEY[i.id]).filter(Boolean));
+            const feet = collect(FEET_IDS, step);
+            if (feet) {
+                feetHits.set(step, feet.keys);
+                feetOwners.set(step, feet.owners);
+            }
         }
 
         // ── Collect triplet sub-row hits by beat ─────────────────────────────
@@ -327,6 +366,36 @@ export const NotationView = ({ grid, beats, subdiv, currentStep, mutedTracks, tr
         hTuplets.forEach(t => t.setContext(ctx).draw());
         fTuplets.forEach(t => t.setContext(ctx).draw());
 
+        // ── Notehead elements for practice colouring ──────────────────────────
+        // VexFlow indexes _noteHeads by the *original* key position (it stores
+        // them via sortedKeyProps[i].index), so position i lines up with the
+        // keys array we passed in, and therefore with our owners array.
+        //
+        // Each notehead is drawn inside its own <g class="vf-notehead">, which
+        // getSVGElement() resolves by id once the SVG is in the document.
+        const noteEls = new Map();
+        const recordHeads = (tickables, hitIndices, owners) => {
+            for (const [step, idx] of hitIndices) {
+                const note = tickables[idx];
+                const ownerList = owners.get(step);
+                if (!note || !ownerList) continue;
+                const heads = note.noteHeads ?? [];
+                ownerList.forEach((instIdx, i) => {
+                    const group = heads[i]?.getSVGElement?.();
+                    if (!group) return;
+                    const paths = group.querySelectorAll('path');
+                    if (paths.length) noteEls.set(`s${step}:${instIdx}`, paths);
+                });
+            }
+        };
+        recordHeads(hTick, hIdx, handOwners);
+        recordHeads(fTick, fIdx, feetOwners);
+        noteElsRef.current = noteEls;
+
+        // Re-apply any verdicts already on screen — the notes were just redrawn
+        // fresh, so without this a grid edit would wipe the colours.
+        applyScoreColours();
+
         // ── SVG offset for cursor ─────────────────────────────────────────────
         const svgEl = containerRef.current.querySelector('svg');
         if (svgEl) {
@@ -357,6 +426,13 @@ export const NotationView = ({ grid, beats, subdiv, currentStep, mutedTracks, tr
         }
         stepXRef.current = stepX;
     }, [grid, beats, subdiv, mutedTracks, tripletGrid]);
+
+    // Recolour in place. Deliberately not a dependency of the render effect
+    // above: scores land several times a second and re-running VexFlow that
+    // often would be wasteful.
+    useEffect(() => {
+        applyScoreColours();
+    }, [cellScores]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (!cursorRef.current) return;

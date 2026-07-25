@@ -19,8 +19,10 @@ RhythmCraft is an interactive drum sequencer designed for drummers and educators
     -   **Dynamic BPM**: Change tempo in real-time.
     -   **Swing Control**: Add groove to your beats.
     -   **Metronome**: Built-in click track.
+    -   **Click Only**: Silence the kit and keep just the pulse, so you can play a pattern from the notation and grid alone.
+-   **Practice Mode**: Play along on a MIDI drum kit and see whether your timing is right. Every hit is scored against the sequenced pattern and the grid and notation colour themselves green (on time), amber (early or late) or red (missed). Includes an automatic tempo ramp so you can start slow and build up speed.
 -   **Rudiment Library**: Learn essential drum patterns (Paradiddles, Rolls) with visual sticking guides ('R' / 'L') displayed directly on the grid.
--   **AI Beat Generation**: Describe a beat (e.g., "Funky breakbeat with ghost notes") and let Google Gemini generate it for you.
+-   **AI Beat Generation**: Describe a beat (e.g., "Funky breakbeat with ghost notes") and let Claude generate it. Bring your own Anthropic API key; it stays in your browser.
 -   **MIDI Export**: Download your beats as MIDI files to use in your DAW.
 
 ## Tech Stack
@@ -29,7 +31,7 @@ RhythmCraft is an interactive drum sequencer designed for drummers and educators
 -   **Styling**: Tailwind CSS
 -   **Icons**: Lucide React
 -   **Audio**: Web Audio API (Custom `DrumSynth` engine)
--   **AI**: Google Gemini API
+-   **AI**: Anthropic API (`claude-opus-5`) via `@anthropic-ai/sdk`
 
 ## Getting Started
 
@@ -51,16 +53,8 @@ RhythmCraft is an interactive drum sequencer designed for drummers and educators
     npm install
     ```
 
-3.  Set up Environment Variables:
-    -   Copy the example env file:
-        ```bash
-        cp .env.example .env
-        ```
-    -   Open `.env` and add your Google Gemini API key:
-        ```
-        VITE_GEMINI_API_KEY=your_api_key_here
-        ```
-    -   *Note: You can get a free API key from [Google AI Studio](https://aistudio.google.com/).*
+3.  There is nothing to configure. No API keys are needed to build or run the app
+    (see [AI beat generation](#ai-beat-generation) for how the AI feature is keyed).
 
 4.  Run the development server:
     ```bash
@@ -77,6 +71,100 @@ RhythmCraft is an interactive drum sequencer designed for drummers and educators
 -   Click **Rudiments** to load standard drum patterns.
 -   Click **Generate** to use AI to create a beat.
 -   Click the **Download** icon to export as MIDI.
+
+## AI beat generation
+
+Describe a beat in plain language and Claude writes the pattern into the grid.
+
+### Bring your own key
+
+You supply your own Anthropic API key. Open the **AI** panel, paste a key
+starting with `sk-ant-`, and it is remembered in that browser.
+
+**Your key never touches this site's server.** It is held in your browser's
+local storage and sent directly from your browser to `api.anthropic.com`. The
+app has no backend for this — nothing to log your key, nothing to leak it.
+
+The tradeoff of that design is local storage: any script running on this page
+could read the key, so a cross-site-scripting hole would expose it. The app
+renders no user-supplied HTML and loads no third-party scripts, which keeps that
+risk small, but treat the stored key accordingly — scope it to what you are
+willing to spend, and don't leave one saved on a shared computer. Use **Forget**
+to remove it.
+
+Get a key from the [Anthropic Console](https://console.anthropic.com/settings/keys).
+
+### Why not a shared key
+
+Because there is no safe way to ship one. Vite inlines every `VITE_*` variable
+into the public JavaScript bundle at build time, so a key added that way is
+plain text in the shipped code, readable by anyone who opens devtools — the
+build does not hide it. Serving a shared key properly would mean a backend
+holding it plus rate limiting to stop it being drained, which is a different
+project.
+
+## Practice mode
+
+Practice mode listens to a MIDI drum kit and tells you whether you are playing
+the pattern in time. It was built against **Aerodrums 2**, but works with any
+kit that sends MIDI note-on messages.
+
+**Requires Chrome or Edge.** Safari does not implement Web MIDI. Firefox 108+
+works. The page must be on `localhost` or `https`.
+
+### Setting it up
+
+Open **Practice setup** (the sliders icon) and work down the panel:
+
+1. **MIDI input.** Plug the kit in first, then press *Connect MIDI* and allow
+   the browser prompt. The device is auto-selected if its name looks like an
+   Aerodrums kit. Hit a drum and check the raw message readout updates.
+2. **Latency calibration.** Run this before your first session, and again if you
+   change audio output. It plays sixteen clicks; hit any pad on each one. The
+   whole chain from stick to browser adds roughly 15–25 ms, and your speakers
+   add another 10–30 ms on top. Without measuring it, every hit reads as late.
+3. **Drum mapping.** Defaults follow General MIDI, but Aerodrums sends extra
+   notes for articulations and is remappable in its own software, so press
+   *Learn* next to a track and hit that pad to be certain.
+4. **Tolerances.** How tight "on time" is (25 ms by default), how far out a hit
+   can be and still count, and a velocity floor to stop stray movement
+   registering as extra hits.
+5. **Tempo ramp.** Optional. Once you play a pass cleanly enough, enough times
+   in a row, the tempo steps up on its own until it reaches your ceiling.
+
+### Using it
+
+Press **PRACTICE**, then play. As each note passes, its grid cell and its
+notehead take a colour:
+
+| Colour | Meaning |
+| --- | --- |
+| Green | On time |
+| Amber | Early or late, but close enough to count |
+| Red | Missed |
+| Purple count | Hits that did not belong to any note in the pattern |
+
+The header shows the percentage of notes you hit dead on, and a **feel**
+readout: whether you are rushing or dragging, and by how much. That signed
+number is usually more useful than the percentage, because it tells you which
+way to correct.
+
+Hover any coloured cell to see the exact millisecond offset.
+
+### Click only
+
+**CLICK** in the toolbar silences the kit and leaves a bare pulse: one click per
+beat, pitched up on the downbeat so you can find the top of the bar. Use it to
+practise reading the pattern rather than copying what you hear.
+
+The pattern itself is untouched. Notation still renders in full, and every note
+is still scored exactly as it would be with the kit audible, so your accuracy
+figures are directly comparable between the two. This is deliberately *not* the
+same as muting every track: muting removes a track from the schedule, which also
+removes it from the notation and from scoring.
+
+The pulse is generated independently of the Metronome row, so it plays whether
+or not that row has anything in it. You can toggle it mid-playback.
 
 ## License
 

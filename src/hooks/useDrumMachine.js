@@ -149,7 +149,9 @@ export class DrumSynth {
         noise.start(time);
     }
 
-    playWoodblock(time) {
+    // pitch is raised for the downbeat so the top of the bar is findable by ear
+    // when the kit itself is silent.
+    playWoodblock(time, pitch = 800) {
         if (!this.ctx) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -157,7 +159,7 @@ export class DrumSynth {
         gain.connect(this.masterGain);
 
         // High pitched sine wave with short decay
-        osc.frequency.setValueAtTime(800, time);
+        osc.frequency.setValueAtTime(pitch, time);
         gain.gain.setValueAtTime(1.0, time);
         gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
 
@@ -247,6 +249,13 @@ export const useDrumMachine = () => {
     const [swing, setSwing] = useState(0); // 0 to 50
     const [mutedTracks, setMutedTracks] = useState(() => instruments.map(() => false));
 
+    // Click-only practice: silence the kit and keep just the pulse, so a pattern
+    // can be played from the notation and grid alone. Deliberately not built on
+    // mutedTracks — muting a track removes it from the schedule, which would
+    // also remove it from the notation and from practice scoring. Here the
+    // pattern is untouched and only the audio changes.
+    const [clickOnly, setClickOnly] = useState(false);
+
     // Rudiment State
     const [activeRudiment, setActiveRudiment] = useState(null);
 
@@ -268,14 +277,28 @@ export const useDrumMachine = () => {
     const bpmRef = useRef(bpm);
     const subdivRef = useRef(subdiv);
     const swingRef = useRef(swing);
+    const clickOnlyRef = useRef(clickOnly);
     const audioRef = useRef(new DrumSynth());
     const nextNoteTimeRef = useRef(0);
     const currentStepRef = useRef(0);
     const timerIDRef = useRef(null);
     const totalStepsRef = useRef(totalSteps);
 
+    // ── Practice-mode timing records ────────────────────────────────────────
+    // The scheduler already knows the exact audio-clock time of every note it
+    // schedules, so rather than re-deriving expected times (which breaks the
+    // moment BPM or swing changes mid-loop) we simply record them as they go.
+    //
+    // expectedRef: one entry per note that should be *played by the drummer*.
+    // stepClockRef: one entry per step, hit or not, used to drive the playhead.
+    // Both are trimmed to a few seconds of history each scheduler tick.
+    const expectedRef = useRef([]);
+    const stepClockRef = useRef([]);
+    const barRef = useRef(0);
+
     const lookahead = 25.0; // ms
     const scheduleAheadTime = 0.1; // s
+    const HISTORY_SECONDS = 5;
 
     // Sync Refs
     useEffect(() => { gridRef.current = grid; }, [grid]);
@@ -284,6 +307,7 @@ export const useDrumMachine = () => {
     useEffect(() => { bpmRef.current = bpm; }, [bpm]);
     useEffect(() => { subdivRef.current = subdiv; }, [subdiv]);
     useEffect(() => { swingRef.current = swing; }, [swing]);
+    useEffect(() => { clickOnlyRef.current = clickOnly; }, [clickOnly]);
     useEffect(() => { totalStepsRef.current = totalSteps; }, [totalSteps]);
 
     // Grid Resize Logic Helper
@@ -327,7 +351,9 @@ export const useDrumMachine = () => {
         }
     };
 
-    const playInstrument = (id, time) => {
+    // Stable identity: practice mode holds this in effect dependency lists, and
+    // a fresh function each render would tear down its scoring loop constantly.
+    const playInstrument = useCallback((id, time) => {
         const synth = audioRef.current;
         switch (id) {
             case 'kick': synth.playKick(time); break;
@@ -340,7 +366,7 @@ export const useDrumMachine = () => {
             case 'metronome': synth.playWoodblock(time); break;
             default: break;
         }
-    };
+    }, []);
 
     const toggleCell = (instrumentIndex, stepIndex) => {
         const newGrid = [...grid];
@@ -381,14 +407,48 @@ export const useDrumMachine = () => {
         currentStepRef.current++;
         if (currentStepRef.current >= totalStepsRef.current) {
             currentStepRef.current = 0;
+            barRef.current++;
         }
     };
 
+    // Records a note the drummer is expected to play, keyed uniquely per pass so
+    // the same step in two different loops scores independently.
+    //
+    // Kept sorted by time. Push order alone is not time order: a beat's triplet
+    // notes are all scheduled at the beat boundary, so they interleave with the
+    // grid steps that follow. Consumers scan until they meet a note whose match
+    // window is still open, and an unsorted array would stall that scan.
+    const pushExpected = (bar, step, instrumentIndex, time, isTriplet) => {
+        const entry = {
+            key: `${bar}:${isTriplet ? 't' : 's'}${step}:${instrumentIndex}`,
+            bar, step, instrumentIndex, time, isTriplet,
+        };
+        const list = expectedRef.current;
+        let i = list.length;
+        while (i > 0 && list[i - 1].time > time) i--;
+        list.splice(i, 0, entry);
+    };
+
     const scheduleNote = (stepNumber, time) => {
+        const bar = barRef.current;
+        const clickOnly = clickOnlyRef.current;
+        stepClockRef.current.push({ bar, step: stepNumber, time });
+
+        // In click-only mode the pulse is generated here rather than taken from
+        // the metronome track, so there is always something to play against even
+        // when that row is empty. Accented on the downbeat.
+        if (clickOnly && stepNumber % subdivRef.current === 0) {
+            audioRef.current.playWoodblock(time, stepNumber === 0 ? 1200 : 800);
+        }
+
         // Normal grid
         gridRef.current.forEach((row, instrumentIndex) => {
-            if (row[stepNumber] && !mutedRef.current[instrumentIndex])
-                playInstrument(instruments[instrumentIndex].id, time);
+            if (row[stepNumber] && !mutedRef.current[instrumentIndex]) {
+                if (!clickOnly) playInstrument(instruments[instrumentIndex].id, time);
+                // Recorded either way: silencing the kit must not change what
+                // the drummer is expected to play, or how it is scored.
+                pushExpected(bar, stepNumber, instrumentIndex, time, false);
+            }
         });
         // Triplet sub-row: schedule all 3 notes for this beat at the beat boundary
         if (stepNumber % subdivRef.current === 0) {
@@ -397,28 +457,56 @@ export const useDrumMachine = () => {
             tripletGridRef.current.forEach((row, instrumentIndex) => {
                 if (mutedRef.current[instrumentIndex]) return;
                 for (let t = 0; t < 3; t++) {
-                    if (row[beatIndex * 3 + t])
-                        playInstrument(instruments[instrumentIndex].id, time + (t / 3) * beatDuration);
+                    const tStep = beatIndex * 3 + t;
+                    if (row[tStep]) {
+                        const noteTime = time + (t / 3) * beatDuration;
+                        if (!clickOnly) playInstrument(instruments[instrumentIndex].id, noteTime);
+                        pushExpected(bar, tStep, instrumentIndex, noteTime, true);
+                    }
                 }
             });
         }
     };
 
     const scheduler = useCallback(() => {
-        while (nextNoteTimeRef.current < audioRef.current.ctx.currentTime + scheduleAheadTime) {
+        const now = audioRef.current.ctx.currentTime;
+        while (nextNoteTimeRef.current < now + scheduleAheadTime) {
             scheduleNote(currentStepRef.current, nextNoteTimeRef.current);
             nextNote();
         }
+        // Trim history so the records don't grow without bound
+        const cutoff = now - HISTORY_SECONDS;
+        if (expectedRef.current.length && expectedRef.current[0].time < cutoff)
+            expectedRef.current = expectedRef.current.filter(e => e.time >= cutoff);
+        if (stepClockRef.current.length && stepClockRef.current[0].time < cutoff)
+            stepClockRef.current = stepClockRef.current.filter(e => e.time >= cutoff);
+
         timerIDRef.current = window.setTimeout(scheduler, lookahead);
     }, []);
 
     // Visual Loop
+    // Tracks the step actually being *heard* (latest scheduled step whose time
+    // has passed) rather than the scheduler's write pointer, which runs a
+    // lookahead window ahead of the audio. Only writes state when the step
+    // changes, so an idle playhead doesn't re-render the grid 60 times a second.
     useEffect(() => {
         let animationFrameId;
+        let lastStep = -1;
+
         const loop = () => {
-            let visualStep = currentStepRef.current - 1;
-            if (visualStep < 0) visualStep = totalSteps - 1;
-            setCurrentStep(visualStep);
+            const ctx = audioRef.current.ctx;
+            if (ctx) {
+                const now = ctx.currentTime;
+                let step = -1;
+                const clock = stepClockRef.current;
+                for (let i = clock.length - 1; i >= 0; i--) {
+                    if (clock[i].time <= now) { step = clock[i].step; break; }
+                }
+                if (step !== lastStep) {
+                    lastStep = step;
+                    setCurrentStep(step);
+                }
+            }
             animationFrameId = requestAnimationFrame(loop);
         };
 
@@ -428,7 +516,7 @@ export const useDrumMachine = () => {
         return () => {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
-    }, [isPlaying, totalSteps]);
+    }, [isPlaying]);
 
     const togglePlay = async () => {
         if (isPlaying) {
@@ -440,6 +528,9 @@ export const useDrumMachine = () => {
             await synth.init();
             setIsPlaying(true);
             currentStepRef.current = 0;
+            barRef.current = 0;
+            expectedRef.current = [];
+            stepClockRef.current = [];
             nextNoteTimeRef.current = synth.ctx.currentTime + 0.05;
             scheduler();
         }
@@ -460,6 +551,8 @@ export const useDrumMachine = () => {
         setGrid(newGrid);
         if (newTripletGrid) setTripletGrid(newTripletGrid);
     };
+
+    const getAudioContext = useCallback(() => audioRef.current.ctx, []);
 
     const loadRudiment = (rudiment) => {
         const newGrid = instruments.map(() => Array(totalSteps).fill(false));
@@ -484,11 +577,19 @@ export const useDrumMachine = () => {
         currentStep, setCurrentStep,
         swing, setSwing,
         mutedTracks, toggleMute,
+        clickOnly, setClickOnly,
         grid, setGrid, toggleCell, clearGrid,
         loadRudiment, activeRudiment,
         loadState,
         totalSteps,
         instruments,
         tripletGrid, toggleTripletCell,
+
+        // ── Practice-mode surface ───────────────────────────────────────────
+        // Refs rather than state: practice mode polls these from its own rAF
+        // loop, so nothing here triggers a React render.
+        getAudioContext,
+        expectedRef,
+        playInstrument,
     };
 };

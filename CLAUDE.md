@@ -14,12 +14,11 @@ No test runner is configured.
 
 ## Environment Setup
 
-Copy `.env.example` to `.env` and add a Google Gemini API key:
-```
-VITE_GEMINI_API_KEY=your_key_here
-```
+No environment variables and no API keys are needed to build or run the app.
 
-Get a free key at Google AI Studio. The app still works without it (AI generation will fail gracefully).
+AI beat generation is **bring your own key**: the visitor enters an Anthropic API key in the AI modal, it is kept in their browser's localStorage, and requests go straight from their browser to `api.anthropic.com`.
+
+Do not reintroduce a `VITE_`-prefixed key. Vite inlines every `VITE_*` variable into the public JavaScript bundle at build time, so such a key is readable by anyone who opens devtools — the build does not hide it. If a shared key is ever wanted, it needs a server-side proxy holding it, plus rate limiting.
 
 ## Architecture
 
@@ -49,9 +48,75 @@ This file is the heart of the app. It exports:
 
 The scheduler uses the Web Audio API clock (not `setInterval`) via a lookahead scheduler pattern for precise timing.
 
+**`clickOnly`** silences the kit during playback and emits a generated pulse instead: one woodblock per beat, at 1200 Hz on step 0 and 800 Hz elsewhere. Two things matter about how it is built:
+
+- It is **not** implemented via `mutedTracks`. Muting removes a track from `scheduleNote` entirely, which also removes it from the notation and stops `pushExpected` firing for it, so muted notes are never scored. Click-only skips `playInstrument` but still calls `pushExpected`, leaving the pattern, notation and scoring identical.
+- The pulse is generated from the step index, not read from the metronome track, so it plays regardless of what that row contains and does not double up with it.
+
+It also records what it scheduled, for practice mode:
+- `expectedRef` — one entry per note the drummer should play, with its exact audio-clock time
+- `stepClockRef` — one entry per step, hit or not, which drives the playhead
+
+The playhead reflects the step being *heard* (latest scheduled step whose time has passed), not the scheduler's write pointer, which runs a lookahead window ahead of the audio.
+
+### Practice Mode
+
+Listens to a MIDI drum kit (built for Aerodrums 2) and scores how close each hit
+lands to the sequenced pattern. Grid cells and noteheads turn green, amber or red.
+
+Five pieces, deliberately layered so the pure logic is testable on its own:
+
+- **`src/utils/scoring.js`** — pure matching and classification. No React, no
+  clocks. Greedy nearest-match of hits to expected notes within a tolerance,
+  then `good` / `early` / `late` / `miss` / `extra`. `summarise()` produces the
+  numbers the tempo ramp gates on.
+- **`src/utils/clockBridge.js`** — converts between `AudioContext.currentTime`
+  (what the sequencer schedules in) and `performance.now()` (what Web MIDI
+  stamps hits with). Uses `getOutputTimestamp()` so the reference is what the
+  drummer *hears*, not what the audio graph has processed. Re-anchors every
+  second to absorb drift.
+- **`src/utils/midiMap.js`** — MIDI note → instrument mapping, many notes per
+  instrument (a drum's articulations), persisted to localStorage.
+- **`src/hooks/useMidiInput.js`** — Web MIDI access, port selection, note-on
+  capture. Delivers hits through a callback ref, never state, so a busy bar
+  doesn't render the app on every hit.
+- **`src/hooks/usePracticeMode.js`** — wires it together: hit intake, the
+  resolution loop, calibration, and the tempo ramp.
+
+Three things about this that are easy to get wrong:
+
+1. **Latency must be calibrated, not assumed.** Stick to browser is roughly
+   15–25 ms and output latency adds 10–30 ms more. Without the calibration
+   routine every hit reads as late. The measured offset is subtracted from
+   incoming hit times.
+2. **The scheduler records expected note times rather than re-deriving them.**
+   `useDrumMachine` pushes an entry into `expectedRef` for every note it
+   schedules. Recomputing expected times from BPM would break the moment tempo
+   or swing changed mid-loop. The list is kept sorted by time because triplet
+   notes are all scheduled at their beat boundary and so interleave with the
+   grid steps that follow them.
+3. **A hit is only an `extra` after two match windows, not one.** A note at time
+   T can claim hits in `[T-loose, T+loose]` and isn't itself resolved until
+   `T+loose`, so an early hit is still claimable until `H + 2·loose`. Using one
+   window double-counts every early hit as both `early` and `extra`.
+
+Practice mode only reads `expectedRef` and the audio context, both via refs, so
+scoring never triggers a React render. Verdicts are flushed to state on a 50 ms
+throttle.
+
+Browser support: Chrome and Edge. Firefox 108+. Safari has no Web MIDI at all.
+Needs a secure context (localhost or https).
+
 ### AI Hook: `useAiDrummer` (`src/hooks/useAiDrummer.js`)
 
-Calls Google Gemini API (`gemini-2.5-flash`) to generate a 2D boolean grid matching the `instruments` array dimensions. Takes `totalSteps` and `setGrid` as arguments.
+Calls the Anthropic API (`claude-opus-5`) via `@anthropic-ai/sdk` with `dangerouslyAllowBrowser: true`. Takes `{ totalSteps, beats, subdiv, setGrid }`.
+
+- **Key handling** lives in `src/utils/apiKey.js` — localStorage, format validation, masking. The key is never sent anywhere but `api.anthropic.com`. Proxying it through our own backend was rejected deliberately: that would make us custodian of visitors' keys, with request headers a leak risk in logs.
+- **Structured outputs** (`output_config.format` with a JSON schema) guarantee the response parses and matches the schema, so there is no parse-and-hope path.
+- **The schema is keyed by instrument id**, not a 2D boolean matrix. A matrix has to be read positionally, so a model emitting rows in a different order would silently produce a scrambled beat with nothing to detect it against. Step-index arrays are also far more compact.
+- **Range bounds are enforced client-side** in `patternToGrid` — structured outputs does not support numeric constraints, so the ranges in the schema descriptions are advisory to the model only.
+- `max_tokens` is deliberately generous: on this model it caps thinking *and* response text together, so sizing it around the small JSON payload would truncate mid-object.
+- Errors are matched on the SDK's typed classes, with `APIConnectionError` checked before `APIError` because it subclasses it.
 
 ### Notation: `src/components/NotationView.jsx`
 

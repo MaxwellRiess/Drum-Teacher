@@ -1,0 +1,391 @@
+import React from 'react';
+import { Activity, Zap, X, Sliders, Radio, Timer, TrendingUp } from 'lucide-react';
+import { instruments } from '../hooks/useDrumMachine';
+import { VERDICT_COLOURS } from '../utils/scoring';
+
+const btn = 'border-2 border-black flex items-center justify-center font-bold transition-colors';
+const label = 'text-[9px] font-bold uppercase text-gray-500';
+
+// ── Compact header strip ─────────────────────────────────────────────────────
+export function PracticeBar({ practice }) {
+    const { enabled, setEnabled, setSetupOpen, midi, passStats, calibration } = practice;
+
+    const connected = midi.status === 'granted' && midi.selectedId;
+    const deviceName = midi.inputs.find(i => i.id === midi.selectedId)?.name;
+
+    const accuracy = passStats ? Math.round(passStats.accuracy * 100) : null;
+    const offset = passStats?.meanOffsetMs;
+
+    return (
+        <>
+            <button
+                onClick={() => setEnabled(!enabled)}
+                disabled={!connected}
+                title={connected ? 'Toggle practice mode' : 'Connect a MIDI device first'}
+                className={`h-10 px-3 gap-2 text-sm ${btn}
+                    ${enabled ? 'bg-[#16a34a] border-[#16a34a] text-white' : 'hover:bg-black hover:text-white'}
+                    ${!connected ? 'opacity-40 cursor-not-allowed' : ''}`}
+            >
+                <Activity size={14} /> PRACTICE
+            </button>
+
+            <button
+                onClick={() => setSetupOpen(true)}
+                className={`h-10 w-10 ${btn} hover:bg-black hover:text-white`}
+                title="Practice setup"
+            >
+                <Sliders size={14} />
+            </button>
+
+            {enabled && (
+                <div className="flex items-center gap-3 border-2 border-black px-3 h-10 bg-white">
+                    <div className="flex flex-col leading-none">
+                        <span className={label}>ON TIME</span>
+                        <span className="text-base font-black tabular-nums">
+                            {accuracy === null ? '—' : `${accuracy}%`}
+                        </span>
+                    </div>
+                    <div className="w-px h-6 bg-gray-300" />
+                    <div className="flex flex-col leading-none">
+                        <span className={label}>FEEL</span>
+                        <span className="text-[11px] font-bold tabular-nums">
+                            {offset == null ? '—'
+                                : Math.abs(offset) < 8 ? 'LOCKED'
+                                : offset < 0 ? `RUSHING ${Math.abs(Math.round(offset))}ms`
+                                : `DRAGGING ${Math.round(offset)}ms`}
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {enabled && calibration.offsetMs === 0 && !calibration.manual && (
+                <span className="text-[9px] font-bold uppercase text-amber-600 border-2 border-amber-500 px-2 py-1">
+                    Not calibrated
+                </span>
+            )}
+
+            {enabled && deviceName && (
+                <span className="text-[9px] font-bold uppercase text-gray-400 truncate max-w-[140px]">
+                    {deviceName}
+                </span>
+            )}
+        </>
+    );
+}
+
+// ── Setup modal ──────────────────────────────────────────────────────────────
+export function PracticeSetupModal({ practice }) {
+    const {
+        setupOpen, setSetupOpen, midi,
+        midiMap, learnTarget, setLearnTarget, clearMapping, resetMapping,
+        settings, updateSettings,
+        calibration, calibrating, calibrationProgress, startCalibration, setCalibrationOffset,
+        recentPasses,
+    } = practice;
+
+    if (!setupOpen) return null;
+
+    const Section = ({ icon: Icon, title, children }) => (
+        <div className="border-2 border-black">
+            <div className="bg-black text-white px-3 py-1.5 flex items-center gap-2">
+                <Icon size={12} />
+                <h3 className="text-[11px] font-black uppercase tracking-wide">{title}</h3>
+            </div>
+            <div className="p-3 space-y-3">{children}</div>
+        </div>
+    );
+
+    const Slider = ({ text, value, min, max, step = 1, suffix, onChange }) => (
+        <div className="flex items-center gap-2">
+            <span className={`${label} w-28 flex-shrink-0`}>{text}</span>
+            <input
+                type="range" min={min} max={max} step={step} value={value}
+                onChange={e => onChange(Number(e.target.value))}
+                className="flex-1 h-1.5 cursor-pointer" style={{ accentColor: '#000' }}
+            />
+            <span className="w-16 text-right text-xs font-bold tabular-nums">{value}{suffix}</span>
+        </div>
+    );
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white border-4 border-black w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-[16px_16px_0px_#000]">
+
+                <div className="flex justify-between items-center px-6 py-4 border-b-4 border-black sticky top-0 bg-white z-10">
+                    <h2 className="text-2xl font-black uppercase flex items-center gap-3">
+                        <Activity size={26} /> PRACTICE_SETUP
+                    </h2>
+                    <button onClick={() => setSetupOpen(false)} className="hover:rotate-90 transition-transform">
+                        <X size={26} />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+
+                    {/* ── MIDI device ─────────────────────────────────────── */}
+                    <Section icon={Radio} title="1 · MIDI Input">
+                        {!midi.supported && (
+                            <p className="text-xs text-red-600 font-bold">
+                                This browser has no Web MIDI support. Use Chrome or Edge.
+                                Safari does not implement it.
+                            </p>
+                        )}
+
+                        {midi.supported && midi.status !== 'granted' && (
+                            <div className="space-y-2">
+                                <button
+                                    onClick={midi.requestAccess}
+                                    className="h-10 px-4 bg-black text-white font-bold text-sm uppercase hover:bg-neutral-700"
+                                >
+                                    {midi.status === 'requesting' ? 'Requesting…' : 'Connect MIDI'}
+                                </button>
+                                {midi.error && <p className="text-xs text-red-600 font-bold">{midi.error}</p>}
+                                <p className="text-[10px] text-gray-500 leading-relaxed">
+                                    Plug the Aerodrums in first, then allow the browser prompt.
+                                    Web MIDI needs localhost or https.
+                                </p>
+                            </div>
+                        )}
+
+                        {midi.status === 'granted' && (
+                            <div className="space-y-2">
+                                {midi.inputs.length === 0 ? (
+                                    <p className="text-xs text-amber-600 font-bold">
+                                        Access granted but no input devices found. Check the kit is connected
+                                        and, if MIDI only flows while the Aerodrums software runs, start it.
+                                    </p>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <span className={`${label} w-28`}>Device</span>
+                                        <select
+                                            value={midi.selectedId ?? ''}
+                                            onChange={e => midi.selectInput(e.target.value)}
+                                            className="flex-1 border-2 border-black px-2 h-9 text-xs font-bold bg-white"
+                                        >
+                                            <option value="">— select —</option>
+                                            {midi.inputs.map(i => (
+                                                <option key={i.id} value={i.id}>
+                                                    {i.name}{i.manufacturer ? ` · ${i.manufacturer}` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                <div className="bg-gray-100 border border-gray-300 px-3 py-2 text-[10px] font-mono">
+                                    LAST MESSAGE ::{' '}
+                                    {midi.lastMessage
+                                        ? `note ${midi.lastMessage.note} · vel ${midi.lastMessage.velocity} · ch ${midi.lastMessage.channel + 1} · ${midi.lastMessage.type}`
+                                        : 'nothing received yet — hit a drum'}
+                                </div>
+                            </div>
+                        )}
+                    </Section>
+
+                    {/* ── Calibration ─────────────────────────────────────── */}
+                    <Section icon={Timer} title="2 · Latency Calibration">
+                        <p className="text-[10px] text-gray-600 leading-relaxed">
+                            The chain from stick to browser adds roughly 15–25 ms, and your speakers add
+                            more. Without measuring it every hit reads as late. Hit <strong>any</strong> pad
+                            on each click, sixteen times.
+                        </p>
+
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={startCalibration}
+                                disabled={calibrating || midi.status !== 'granted'}
+                                className="h-10 px-4 bg-black text-white font-bold text-sm uppercase hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                {calibrating ? 'Listening…' : 'Run calibration'}
+                            </button>
+
+                            <div className="flex flex-col leading-none">
+                                <span className={label}>Offset</span>
+                                <span className="text-base font-black tabular-nums">
+                                    {calibration.offsetMs} ms
+                                </span>
+                            </div>
+
+                            {calibration.samples > 0 && (
+                                <span className="text-[9px] text-gray-400 uppercase font-bold">
+                                    {calibration.samples} samples
+                                </span>
+                            )}
+                            {calibration.failed && (
+                                <span className="text-[9px] text-red-600 uppercase font-bold">
+                                    Too few hits detected — try again
+                                </span>
+                            )}
+                        </div>
+
+                        {calibrating && (
+                            <div className="h-2 border-2 border-black">
+                                <div
+                                    className="h-full bg-black transition-all"
+                                    style={{ width: `${calibrationProgress * 100}%` }}
+                                />
+                            </div>
+                        )}
+
+                        <Slider
+                            text="Manual trim" value={calibration.offsetMs}
+                            min={-100} max={200} suffix=" ms"
+                            onChange={setCalibrationOffset}
+                        />
+                    </Section>
+
+                    {/* ── Mapping ─────────────────────────────────────────── */}
+                    <Section icon={Zap} title="3 · Drum Mapping">
+                        <p className="text-[10px] text-gray-600 leading-relaxed">
+                            Aerodrums sends roughly General MIDI, but with extra notes for articulations,
+                            and it is remappable in its own software. Press LEARN and hit the pad to be sure.
+                        </p>
+
+                        <div className="space-y-1">
+                            {instruments.map(inst => {
+                                if (inst.id === 'metronome') return null;
+                                const notes = midiMap[inst.id] ?? [];
+                                const isLearning = learnTarget === inst.id;
+                                return (
+                                    <div key={inst.id} className="flex items-center gap-2 border border-gray-300 px-2 py-1">
+                                        <span className="text-[10px] font-bold uppercase w-24 flex-shrink-0">
+                                            {inst.name}
+                                        </span>
+                                        <span className="flex-1 text-[10px] font-mono text-gray-500">
+                                            {isLearning
+                                                ? <span className="text-black font-bold animate-pulse">HIT THE PAD NOW…</span>
+                                                : notes.length ? notes.join(', ') : <span className="text-red-500">unmapped</span>}
+                                        </span>
+                                        <button
+                                            onClick={() => setLearnTarget(isLearning ? null : inst.id)}
+                                            className={`px-2 h-6 border border-black text-[9px] font-bold uppercase
+                                                ${isLearning ? 'bg-black text-white' : 'hover:bg-black hover:text-white'}`}
+                                        >
+                                            {isLearning ? 'Cancel' : 'Learn'}
+                                        </button>
+                                        <button
+                                            onClick={() => clearMapping(inst.id)}
+                                            className="px-2 h-6 border border-gray-400 text-[9px] font-bold uppercase text-gray-500 hover:bg-red-600 hover:text-white hover:border-red-600"
+                                        >
+                                            Clear
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <button
+                            onClick={resetMapping}
+                            className="text-[9px] font-bold uppercase text-gray-400 hover:text-black underline"
+                        >
+                            Reset to defaults
+                        </button>
+                    </Section>
+
+                    {/* ── Tolerances ──────────────────────────────────────── */}
+                    <Section icon={Sliders} title="4 · Tolerances">
+                        <Slider
+                            text="On time within" value={settings.windows.tight}
+                            min={5} max={60} suffix=" ms"
+                            onChange={v => updateSettings({ windows: { ...settings.windows, tight: v } })}
+                        />
+                        <Slider
+                            text="Counts as a hit" value={settings.windows.loose}
+                            min={30} max={150} suffix=" ms"
+                            onChange={v => updateSettings({ windows: { ...settings.windows, loose: Math.max(v, settings.windows.tight + 5) } })}
+                        />
+                        <Slider
+                            text="Velocity floor" value={settings.velocityFloor}
+                            min={0} max={80}
+                            onChange={v => updateSettings({ velocityFloor: v })}
+                        />
+                        <p className="text-[10px] text-gray-500 leading-relaxed">
+                            Raise the velocity floor if stray movement registers as extra hits.
+                        </p>
+                    </Section>
+
+                    {/* ── Tempo ramp ──────────────────────────────────────── */}
+                    <Section icon={TrendingUp} title="5 · Tempo Ramp">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox" checked={settings.rampEnabled}
+                                onChange={e => updateSettings({ rampEnabled: e.target.checked })}
+                                className="w-4 h-4 accent-black"
+                            />
+                            <span className="text-[11px] font-bold uppercase">
+                                Speed up automatically when I play it clean
+                            </span>
+                        </label>
+
+                        <Slider
+                            text="Clean means" value={Math.round(settings.rampThreshold * 100)}
+                            min={50} max={100} suffix="% on time"
+                            onChange={v => updateSettings({ rampThreshold: v / 100 })}
+                        />
+                        <Slider
+                            text="Passes needed" value={settings.rampBars}
+                            min={1} max={8}
+                            onChange={v => updateSettings({ rampBars: v })}
+                        />
+                        <Slider
+                            text="Step up by" value={settings.rampStep}
+                            min={1} max={20} suffix=" bpm"
+                            onChange={v => updateSettings({ rampStep: v })}
+                        />
+                        <Slider
+                            text="Stop at" value={settings.rampCeiling}
+                            min={80} max={220} suffix=" bpm"
+                            onChange={v => updateSettings({ rampCeiling: v })}
+                        />
+                    </Section>
+
+                    {/* ── Recent passes ───────────────────────────────────── */}
+                    {recentPasses.length > 0 && (
+                        <Section icon={Activity} title="Recent Passes">
+                            <div className="flex items-end gap-1 h-20">
+                                {recentPasses.map((p, i) => (
+                                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                                        <div
+                                            className="w-full"
+                                            style={{
+                                                height: `${Math.max(2, p.accuracy * 64)}px`,
+                                                backgroundColor: p.accuracy >= 0.85 ? VERDICT_COLOURS.good
+                                                    : p.accuracy >= 0.5 ? VERDICT_COLOURS.early
+                                                        : VERDICT_COLOURS.miss,
+                                            }}
+                                        />
+                                        <span className="text-[8px] font-bold tabular-nums text-gray-400">
+                                            {Math.round(p.accuracy * 100)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </Section>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Legend ───────────────────────────────────────────────────────────────────
+export function ScoreLegend({ extraCount }) {
+    const items = [
+        ['On time', VERDICT_COLOURS.good],
+        ['Early / late', VERDICT_COLOURS.early],
+        ['Missed', VERDICT_COLOURS.miss],
+    ];
+    return (
+        <div className="flex items-center gap-3 text-[9px] font-bold uppercase text-gray-500">
+            {items.map(([text, colour]) => (
+                <span key={text} className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 border border-black" style={{ backgroundColor: colour }} />
+                    {text}
+                </span>
+            ))}
+            {extraCount > 0 && (
+                <span style={{ color: VERDICT_COLOURS.extra }}>{extraCount} extra hits</span>
+            )}
+        </div>
+    );
+}

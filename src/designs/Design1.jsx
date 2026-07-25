@@ -3,11 +3,108 @@ import { useDrumMachine, RUDIMENTS } from '../hooks/useDrumMachine';
 import { useAiDrummer } from '../hooks/useAiDrummer';
 import { NotationView } from '../components/NotationView';
 import { exportMidi } from '../utils/midiExport';
-import { Play, Pause, X, Music, Sparkles, Download, Terminal, ChevronDown, Link } from 'lucide-react';
+import { Play, Pause, X, Music, Sparkles, Download, Terminal, ChevronDown, Link, VolumeX, KeyRound, ShieldCheck } from 'lucide-react';
 import { encodeState, decodeState } from '../utils/patternUrl';
+import { usePracticeMode } from '../hooks/usePracticeMode';
+import { maskApiKey } from '../utils/apiKey';
+import { PracticeBar, PracticeSetupModal, ScoreLegend } from '../components/PracticePanel';
+import { VERDICT_COLOURS } from '../utils/scoring';
 
 // Accent color shown when the playhead hits an active pad
 const ACCENT = '#f43f5e'; // rose-500
+
+// ── API key entry ────────────────────────────────────────────────────────────
+// Bring your own key: it lives in this browser and is sent straight to
+// Anthropic, never to this site's server.
+function ApiKeySection({ ai }) {
+    const [draft, setDraft] = useState('');
+    const [editing, setEditing] = useState(false);
+
+    const save = () => {
+        if (ai.setApiKey(draft)) {
+            setDraft('');
+            setEditing(false);
+        }
+    };
+
+    if (ai.apiKey && !editing) {
+        return (
+            <div className="border-2 border-black bg-gray-50 px-3 py-2 flex items-center gap-3">
+                <ShieldCheck size={16} className="flex-shrink-0" />
+                <span className="text-[11px] font-bold uppercase">Key saved</span>
+                <span className="text-[11px] font-mono text-gray-500 flex-1 truncate">
+                    {maskApiKey(ai.apiKey)}
+                </span>
+                <button
+                    onClick={() => { setDraft(''); setEditing(true); }}
+                    className="px-2 h-7 border border-black text-[9px] font-bold uppercase hover:bg-black hover:text-white"
+                >
+                    Replace
+                </button>
+                <button
+                    onClick={ai.forgetApiKey}
+                    className="px-2 h-7 border border-gray-400 text-[9px] font-bold uppercase text-gray-500 hover:bg-red-600 hover:text-white hover:border-red-600"
+                >
+                    Forget
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="border-2 border-black p-3 space-y-2">
+            <label className="text-sm font-bold uppercase flex items-center gap-2">
+                <KeyRound size={14} /> Anthropic API Key
+            </label>
+
+            <div className="flex gap-2">
+                <input
+                    type="password"
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && save()}
+                    placeholder="sk-ant-…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="flex-1 border-2 border-black px-3 h-10 font-mono text-sm focus:outline-none focus:bg-gray-50 placeholder:text-gray-300"
+                />
+                <button
+                    onClick={save}
+                    className="px-4 h-10 bg-black text-white font-bold text-xs uppercase hover:bg-neutral-700"
+                >
+                    Save
+                </button>
+                {ai.apiKey && (
+                    <button
+                        onClick={() => { setDraft(''); setEditing(false); }}
+                        className="px-3 h-10 border-2 border-black font-bold text-xs uppercase hover:bg-gray-100"
+                    >
+                        Cancel
+                    </button>
+                )}
+            </div>
+
+            {ai.keyError && (
+                <p className="text-[11px] font-bold text-red-600">{ai.keyError}</p>
+            )}
+
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+                Your key is stored in this browser and sent directly to Anthropic. It never
+                reaches this site's server. Because it sits in local storage, use a key
+                scoped to what you are willing to spend, and avoid this on a shared computer.
+                {' '}
+                <a
+                    href="https://console.anthropic.com/settings/keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-bold text-black hover:bg-black hover:text-white"
+                >
+                    Get a key
+                </a>
+            </p>
+        </div>
+    );
+}
 
 // Musically meaningful subdivision values and their display labels
 const SUBDIV_VALUES = [2, 3, 4, 6, 8];
@@ -15,7 +112,13 @@ const SUBDIV_LABELS = { 2: '8ths', 3: '8×3', 4: '16ths', 6: '16×3', 8: '32nds'
 
 export default function Design1() {
     const machine = useDrumMachine();
-    const ai = useAiDrummer(machine.totalSteps, machine.setGrid);
+    const ai = useAiDrummer({
+        totalSteps: machine.totalSteps,
+        beats: machine.beats,
+        subdiv: machine.subdiv,
+        setGrid: machine.setGrid,
+    });
+    const practice = usePracticeMode({ machine });
     const [showRudiments, setShowRudiments] = useState(false);
     const [copied, setCopied] = useState(false);
     const [expandedTripletRows, setExpandedTripletRows] = useState(new Set());
@@ -91,6 +194,18 @@ export default function Design1() {
                 >
                     <X size={15} />
                 </button>
+                <button
+                    onClick={() => machine.setClickOnly(!machine.clickOnly)}
+                    title={machine.clickOnly
+                        ? 'Kit is silent — click track only'
+                        : 'Silence the kit and play the click only'}
+                    className={`h-10 px-3 border-2 flex items-center gap-2 text-sm font-bold flex-shrink-0 transition-colors
+                        ${machine.clickOnly
+                            ? 'bg-black text-white border-black'
+                            : 'border-black hover:bg-black hover:text-white'}`}
+                >
+                    <VolumeX size={14} /> CLICK
+                </button>
 
                 <div className="w-px h-8 bg-black flex-shrink-0" />
 
@@ -112,6 +227,11 @@ export default function Design1() {
                 >
                     <Link size={14} /> {copied ? 'COPIED!' : 'SHARE'}
                 </button>
+
+                <div className="w-px h-8 bg-black flex-shrink-0" />
+
+                <PracticeBar practice={practice} />
+
                 <div className="w-px h-8 bg-black flex-shrink-0" />
 
                 <div className="flex items-center gap-1.5">
@@ -150,8 +270,9 @@ export default function Design1() {
 
             {/* ── NOTATION (full width, fixed height) ── */}
             <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-1 flex-shrink-0">
-                <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1 text-gray-400">
-                    <Music size={9} /> VISUAL_NOTATION
+                <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center justify-between gap-1 text-gray-400">
+                    <span className="flex items-center gap-1"><Music size={9} /> VISUAL_NOTATION</span>
+                    {practice.enabled && <ScoreLegend extraCount={practice.extraCount} />}
                 </div>
                 <NotationView
                     grid={machine.grid}
@@ -161,6 +282,7 @@ export default function Design1() {
                     mutedTracks={machine.mutedTracks}
                     activeRudiment={machine.activeRudiment}
                     tripletGrid={machine.tripletGrid}
+                    cellScores={practice.enabled ? practice.cellScores : null}
                 />
             </div>
 
@@ -240,8 +362,19 @@ export default function Design1() {
                                                 sticking = machine.activeRudiment.sticking[stepIdx % machine.activeRudiment.sticking.length];
                                             }
 
+                                            // Practice verdict wins over the playhead accent on an
+                                            // active cell — the whole point of the mode is that the
+                                            // colour tells you how you played it.
+                                            const score = practice.enabled
+                                                ? practice.cellScores[`s${stepIdx}:${instIdx}`]
+                                                : null;
+
                                             let bg, border, textColor;
-                                            if (isActive && isCurrentStep) {
+                                            if (isActive && score) {
+                                                bg = VERDICT_COLOURS[score.verdict];
+                                                border = isCurrentStep ? '#000' : bg;
+                                                textColor = '#fff';
+                                            } else if (isActive && isCurrentStep) {
                                                 bg = ACCENT; border = ACCENT; textColor = '#fff';
                                             } else if (isActive) {
                                                 if (sticking === 'L') { bg = '#737373'; border = '#737373'; }
@@ -260,6 +393,9 @@ export default function Design1() {
                                                     key={stepIdx}
                                                     onMouseDown={() => machine.toggleCell(instIdx, stepIdx)}
                                                     disabled={machine.mutedTracks[instIdx]}
+                                                    title={score?.deltaMs != null
+                                                        ? `${score.deltaMs > 0 ? '+' : ''}${Math.round(score.deltaMs)} ms`
+                                                        : score ? 'missed' : undefined}
                                                     className={`flex-1 relative flex items-center justify-center text-[10px] font-black transition-colors duration-75
                                                         ${isBeatStart ? 'border-l-2' : 'border-l'}
                                                         ${machine.mutedTracks[instIdx] ? 'opacity-25 cursor-not-allowed' : ''}
@@ -297,8 +433,15 @@ export default function Design1() {
                                                 const isBeatStart = tStepIdx % 3 === 0;
                                                 const isCurrentBeat = Math.floor(tStepIdx / 3) === currentBeat;
 
+                                                const tScore = practice.enabled
+                                                    ? practice.cellScores[`t${tStepIdx}:${instIdx}`]
+                                                    : null;
+
                                                 let bg, border;
-                                                if (isActive) {
+                                                if (isActive && tScore) {
+                                                    bg = VERDICT_COLOURS[tScore.verdict];
+                                                    border = bg;
+                                                } else if (isActive) {
                                                     bg = '#4f46e5'; border = '#4f46e5';
                                                 } else if (isCurrentBeat) {
                                                     bg = '#e0e7ff';
@@ -385,6 +528,9 @@ export default function Design1() {
                 )}
             </div>
 
+            {/* ── PRACTICE SETUP ── */}
+            <PracticeSetupModal practice={practice} />
+
             {/* ── AI MODAL ── */}
             {ai.showAiModal && (
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -399,6 +545,8 @@ export default function Design1() {
                         </div>
 
                         <div className="space-y-6">
+                            <ApiKeySection ai={ai} />
+
                             <div className="flex flex-col gap-2">
                                 <label className="text-sm font-bold uppercase">Input Prompt</label>
                                 <textarea
@@ -418,7 +566,7 @@ export default function Design1() {
 
                             <button
                                 onClick={ai.handleGeneratePattern}
-                                disabled={ai.isGenerating || !ai.aiPrompt.trim()}
+                                disabled={ai.isGenerating || !ai.aiPrompt.trim() || !ai.apiKey}
                                 className="w-full h-16 bg-black text-white font-black text-xl uppercase tracking-widest hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-4"
                             >
                                 {ai.isGenerating
