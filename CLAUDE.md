@@ -108,6 +108,20 @@ Practice mode only reads `expectedRef` and the audio context, both via refs, so
 scoring never triggers a React render. Verdicts are flushed to state on a 50 ms
 throttle.
 
+**Measured clock behaviour** (2-minute run, 492 samples, macOS/Chrome, audio playing):
+
+| | Measured | Implication |
+|---|---|---|
+| Clock rate drift, `performance.now()` vs `ctx.currentTime` | 23 ppm (1.4 ms/min) | 0.02 ms of error per 1 s resync interval — negligible |
+| Output lag (`currentTime − contextTime`) | 33.3 ms, SD 0.42 ms | Stable |
+| Largest single step in output lag | 5.4 ms | Real but small; the resync absorbs it within 1 s |
+| Bridge error vs anchor staleness | ~2.6 ms mean / 5.4 ms worst, **flat** at 250 ms, 1 s, 5 s and 30 s | Error does not grow with staleness, so it is `getOutputTimestamp` noise, not drift |
+| Scheduler beat spacing over 297 beats | SD 0.000 ms, 0.000 ms cumulative drift | The beat grid itself is exact |
+
+The flat error-vs-staleness result is the important one: `RESYNC_INTERVAL_MS`
+could be raised a long way without harm, and drift is not a plausible cause of
+scoring problems. Suspect calibration or output-device changes first.
+
 Browser support: Chrome and Edge. Firefox 108+. Safari has no Web MIDI at all.
 Needs a secure context (localhost or https).
 

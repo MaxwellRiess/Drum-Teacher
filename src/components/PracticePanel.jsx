@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Zap, X, Sliders, Radio, Timer, TrendingUp } from 'lucide-react';
+import { Activity, Zap, X, Sliders, Radio, Timer, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
 import { instruments } from '../hooks/useDrumMachine';
 import { VERDICT_COLOURS } from '../utils/scoring';
 
@@ -383,7 +383,7 @@ export function PracticeSetupModal({ practice }) {
 // ── Live score panel ─────────────────────────────────────────────────────────
 // Sits beside the notation, in space the centred stave was leaving empty. Sized
 // to be readable from playing distance rather than from a mouse.
-export function ScorePanel({ practice, windows }) {
+export function ScorePanel({ practice, windows, expanded = false, onToggleExpand }) {
     const { passStats, recentHits, extraCount, calibration } = practice;
 
     const accuracy = passStats ? Math.round(passStats.accuracy * 100) : null;
@@ -394,6 +394,38 @@ export function ScorePanel({ practice, windows }) {
     const span = windows.loose;
     const positionPct = (deltaMs) =>
         50 + Math.max(-50, Math.min(50, (deltaMs / span) * 50));
+
+    // Expanded is the same panel scaled for reading from playing distance,
+    // rather than a second component that could drift out of step with this one.
+    const sz = expanded
+        ? {
+            wrap: 'flex-1 min-h-0',
+            accuracy: 'text-[9rem] leading-[0.85]',
+            pct: 'text-6xl',
+            feel: 'text-6xl',
+            feelUnit: 'text-2xl',
+            caption: 'text-sm',
+            meter: 'flex-1 min-h-[160px]',
+            mark: 'w-[6px]',
+            tallyText: 'text-base',
+            tallyNum: 'text-2xl',
+            swatch: 'w-4 h-4',
+            pad: 'p-6 space-y-6',
+        }
+        : {
+            wrap: 'w-[290px] flex-shrink-0',
+            accuracy: 'text-5xl',
+            pct: 'text-2xl',
+            feel: 'text-lg',
+            feelUnit: 'text-xs',
+            caption: label,
+            meter: 'h-14',
+            mark: 'w-[3px]',
+            tallyText: 'text-[9px]',
+            tallyNum: 'text-[11px]',
+            swatch: 'w-2.5 h-2.5',
+            pad: 'p-3 space-y-3',
+        };
 
     const counts = passStats?.counts;
     const tally = [
@@ -409,37 +441,48 @@ export function ScorePanel({ practice, windows }) {
             : offset < 0 ? VERDICT_COLOURS.early : VERDICT_COLOURS.late;
 
     return (
-        <div className="w-[290px] flex-shrink-0 border-2 border-black bg-white flex flex-col">
+        <div className={`${sz.wrap} border-2 border-black bg-white flex flex-col`}>
             <div className="bg-black text-white px-3 py-1 flex items-center gap-2">
-                <Activity size={11} />
-                <h3 className="text-[10px] font-black uppercase tracking-wide">Live timing</h3>
+                <Activity size={expanded ? 14 : 11} />
+                <h3 className={`${expanded ? 'text-sm' : 'text-[10px]'} font-black uppercase tracking-wide`}>
+                    Live timing
+                </h3>
                 {calibration.offsetMs === 0 && !calibration.manual && !calibration.fromLivePlay && (
-                    <span className="ml-auto text-[8px] font-bold uppercase text-amber-400">
+                    <span className="text-[8px] font-bold uppercase text-amber-400">
                         Uncalibrated
                     </span>
                 )}
+                <button
+                    onClick={onToggleExpand}
+                    title={expanded ? 'Shrink (Esc)' : 'Fill the screen'}
+                    className="ml-auto hover:opacity-60 transition-opacity"
+                >
+                    {expanded ? <Minimize2 size={16} /> : <Maximize2 size={13} />}
+                </button>
             </div>
 
-            <div className="p-3 space-y-3 flex-1">
+            <div className={`${sz.pad} flex-1 flex flex-col min-h-0`}>
 
                 {/* ── Headline accuracy ── */}
-                <div className="flex items-end justify-between">
+                <div className="flex items-end justify-between flex-shrink-0">
                     <div className="leading-none">
-                        <div className="text-5xl font-black tabular-nums">
+                        <div className={`${sz.accuracy} font-black tabular-nums`}>
                             {accuracy === null ? '—' : accuracy}
-                            {accuracy !== null && <span className="text-2xl">%</span>}
+                            {accuracy !== null && <span className={sz.pct}>%</span>}
                         </div>
-                        <div className={`${label} mt-1`}>On time, last pass</div>
+                        <div className={`${sz.caption} font-bold uppercase text-gray-500 mt-1`}>
+                            On time, last pass
+                        </div>
                     </div>
                     <div className="text-right leading-none">
                         <div
-                            className="text-lg font-black tabular-nums"
+                            className={`${sz.feel} font-black tabular-nums`}
                             style={{ color: feelColour }}
                         >
                             {offset == null ? '—' : `${offset > 0 ? '+' : ''}${Math.round(offset)}`}
-                            {offset != null && <span className="text-xs">ms</span>}
+                            {offset != null && <span className={sz.feelUnit}>ms</span>}
                         </div>
-                        <div className={`${label} mt-1`}>
+                        <div className={`${sz.caption} font-bold uppercase text-gray-500 mt-1`}>
                             {offset == null ? 'Feel'
                                 : Math.abs(offset) < 8 ? 'Locked'
                                     : offset < 0 ? 'Rushing' : 'Dragging'}
@@ -450,18 +493,24 @@ export function ScorePanel({ practice, windows }) {
                 {/* ── Timing meter ── */}
                 {/* One mark per recent note, oldest faintest, so the drift of a
                     whole phrase is visible rather than just the last hit. */}
-                <div>
-                    <div className="flex justify-between mb-1">
-                        <span className="text-[8px] font-bold uppercase" style={{ color: VERDICT_COLOURS.early }}>
+                <div className={`${expanded ? 'flex-1 flex flex-col min-h-0 mt-6' : 'mt-3'}`}>
+                    <div className="flex justify-between mb-1 flex-shrink-0">
+                        <span
+                            className={`${expanded ? 'text-sm' : 'text-[8px]'} font-bold uppercase`}
+                            style={{ color: VERDICT_COLOURS.early }}
+                        >
                             ◀ Early
                         </span>
-                        <span className={label}>±{span}ms</span>
-                        <span className="text-[8px] font-bold uppercase" style={{ color: VERDICT_COLOURS.late }}>
+                        <span className={`${sz.caption} font-bold uppercase text-gray-500`}>±{span}ms</span>
+                        <span
+                            className={`${expanded ? 'text-sm' : 'text-[8px]'} font-bold uppercase`}
+                            style={{ color: VERDICT_COLOURS.late }}
+                        >
                             Late ▶
                         </span>
                     </div>
 
-                    <div className="relative h-14 border-2 border-black bg-gray-50 overflow-hidden">
+                    <div className={`relative ${sz.meter} border-2 border-black bg-gray-50 overflow-hidden`}>
                         {/* on-time band */}
                         <div
                             className="absolute inset-y-0"
@@ -474,6 +523,26 @@ export function ScorePanel({ practice, windows }) {
                         {/* centre line */}
                         <div className="absolute inset-y-0 left-1/2 w-px bg-black opacity-60" />
 
+                        {/* At full size there is room to label the scale. The
+                            outermost two sit exactly on the edges, so they are
+                            anchored inward instead of centred or they clip. */}
+                        {expanded && [-span, -windows.tight, windows.tight, span].map(v => {
+                            const atLeftEdge = v === -span;
+                            const atRightEdge = v === span;
+                            return (
+                                <div
+                                    key={v}
+                                    className={`absolute bottom-1 text-[10px] font-bold tabular-nums text-gray-400
+                                        ${atLeftEdge || atRightEdge ? '' : '-translate-x-1/2'}`}
+                                    style={atLeftEdge ? { left: '4px' }
+                                        : atRightEdge ? { right: '4px' }
+                                            : { left: `${positionPct(v)}%` }}
+                                >
+                                    {v > 0 ? `+${v}` : v}
+                                </div>
+                            );
+                        })}
+
                         {recentHits.map((h, i) => {
                             if (h.deltaMs == null) return null;
                             const age = recentHits.length - i;
@@ -481,11 +550,11 @@ export function ScorePanel({ practice, windows }) {
                                 <div
                                     key={h.id}
                                     title={`${h.instrument} ${h.deltaMs > 0 ? '+' : ''}${Math.round(h.deltaMs)}ms`}
-                                    className="absolute w-[3px] rounded-sm"
+                                    className={`absolute ${sz.mark} rounded-sm`}
                                     style={{
-                                        left: `calc(${positionPct(h.deltaMs)}% - 1.5px)`,
+                                        left: `calc(${positionPct(h.deltaMs)}% - ${expanded ? 3 : 1.5}px)`,
                                         top: '6%',
-                                        height: '88%',
+                                        height: expanded ? '80%' : '88%',
                                         backgroundColor: VERDICT_COLOURS[h.verdict],
                                         opacity: Math.max(0.18, 1 - age * 0.06),
                                     }}
@@ -495,7 +564,7 @@ export function ScorePanel({ practice, windows }) {
 
                         {recentHits.length === 0 && (
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-[9px] font-bold uppercase text-gray-400">
+                                <span className={`${sz.caption} font-bold uppercase text-gray-400`}>
                                     Play to see timing
                                 </span>
                             </div>
@@ -504,17 +573,17 @@ export function ScorePanel({ practice, windows }) {
                 </div>
 
                 {/* ── Tally ── */}
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <div className={`grid ${expanded ? 'grid-cols-5 gap-4 mt-6' : 'grid-cols-2 gap-x-3 gap-y-1 mt-3'} flex-shrink-0`}>
                     {tally.map(([text, count, colour]) => (
                         <div key={text} className="flex items-center gap-1.5">
                             <span
-                                className="w-2.5 h-2.5 border border-black flex-shrink-0"
+                                className={`${sz.swatch} border border-black flex-shrink-0`}
                                 style={{ backgroundColor: colour }}
                             />
-                            <span className="text-[9px] font-bold uppercase text-gray-500 flex-1 truncate">
+                            <span className={`${sz.tallyText} font-bold uppercase text-gray-500 flex-1 truncate`}>
                                 {text}
                             </span>
-                            <span className="text-[11px] font-black tabular-nums">{count}</span>
+                            <span className={`${sz.tallyNum} font-black tabular-nums`}>{count}</span>
                         </div>
                     ))}
                 </div>

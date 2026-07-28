@@ -120,6 +120,7 @@ export default function Design1() {
     });
     const practice = usePracticeMode({ machine });
     const [showRudiments, setShowRudiments] = useState(false);
+    const [scoreExpanded, setScoreExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
     const [expandedTripletRows, setExpandedTripletRows] = useState(new Set());
 
@@ -156,18 +157,28 @@ export default function Design1() {
         });
     };
 
-    // Spacebar always plays / pauses (except when typing in a form element)
+    // Spacebar always plays / pauses (except when typing in a form element).
+    // Escape drops out of the full-screen timing view.
     useEffect(() => {
         const handler = (e) => {
-            if (e.code !== 'Space') return;
             const tag = document.activeElement?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            if (e.code === 'Escape') { setScoreExpanded(false); return; }
+            if (e.code !== 'Space') return;
             e.preventDefault();
             togglePlayRef.current();
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
     }, []);
+
+    // Collapsing when practice mode goes off avoids being stranded in a
+    // full-screen view of a panel that is no longer being fed.
+    useEffect(() => {
+        if (!practice.enabled) setScoreExpanded(false);
+    }, [practice.enabled]);
+
+    const showExpandedScore = practice.enabled && scoreExpanded;
 
     return (
         <div className="h-screen flex flex-col bg-[#f0f0f0] text-black font-mono overflow-hidden selection:bg-black selection:text-white">
@@ -272,28 +283,44 @@ export default function Design1() {
             {/* The stave is centred, so with practice mode on the panel takes
                 space that was otherwise empty rather than costing the notation
                 any width it was using. */}
-            <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-2 flex-shrink-0 flex gap-3 items-stretch">
-                <div className="flex-1 min-w-0">
-                    <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1 text-gray-400">
-                        <Music size={9} /> VISUAL_NOTATION
-                    </div>
-                    <NotationView
-                        grid={machine.grid}
-                        beats={machine.beats}
-                        subdiv={machine.subdiv}
-                        currentStep={machine.currentStep}
-                        mutedTracks={machine.mutedTracks}
-                        activeRudiment={machine.activeRudiment}
-                        tripletGrid={machine.tripletGrid}
-                        cellScores={practice.enabled ? practice.cellScores : null}
+            {showExpandedScore ? (
+                <div className="flex-1 min-h-0 p-3 flex">
+                    <ScorePanel
+                        practice={practice}
+                        windows={practice.settings.windows}
+                        expanded
+                        onToggleExpand={() => setScoreExpanded(false)}
                     />
                 </div>
+            ) : (
+                <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-2 flex-shrink-0 flex gap-3 items-stretch">
+                    <div className="flex-1 min-w-0">
+                        <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1 text-gray-400">
+                            <Music size={9} /> VISUAL_NOTATION
+                        </div>
+                        <NotationView
+                            grid={machine.grid}
+                            beats={machine.beats}
+                            subdiv={machine.subdiv}
+                            currentStep={machine.currentStep}
+                            mutedTracks={machine.mutedTracks}
+                            activeRudiment={machine.activeRudiment}
+                            tripletGrid={machine.tripletGrid}
+                            cellScores={practice.enabled ? practice.cellScores : null}
+                        />
+                    </div>
 
-                {practice.enabled && (
-                    <ScorePanel practice={practice} windows={practice.settings.windows} />
-                )}
-            </div>
+                    {practice.enabled && (
+                        <ScorePanel
+                            practice={practice}
+                            windows={practice.settings.windows}
+                            onToggleExpand={() => setScoreExpanded(true)}
+                        />
+                    )}
+                </div>
+            )}
 
+            {!showExpandedScore && (<>
             {/* ── SEQUENCER GRID (fills all remaining height) ── */}
             <div className="flex-1 flex flex-col min-h-0 px-3 pt-2 pb-1">
 
@@ -535,6 +562,8 @@ export default function Design1() {
                     </div>
                 )}
             </div>
+
+            </>)}
 
             {/* ── PRACTICE SETUP ── */}
             <PracticeSetupModal practice={practice} />

@@ -166,6 +166,12 @@ real-time feedback panel:
 Hover any mark on the meter, or any coloured cell, for the exact millisecond
 offset.
 
+**Press the expand icon** in the panel header to give the timing display the
+whole window, hiding the notation and grid. Useful once you know the beat and
+want to work purely on where your hits are landing. Escape, or the shrink icon,
+brings the rest back. Transport controls stay available, so you can still start
+and stop without collapsing it.
+
 Hover any coloured cell to see the exact millisecond offset.
 
 ### Everything reads as a miss
