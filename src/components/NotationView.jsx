@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Renderer, Stave, StaveNote, Voice, Formatter, Beam, Dot, Tuplet } from 'vexflow';
 // Tuplet kept for triplet-subdiv rendering
 import { instruments } from '../hooks/useDrumMachine';
@@ -223,6 +223,25 @@ export const NotationView = ({
     const cellScoresRef  = useRef(cellScores);
     cellScoresRef.current = cellScores;
 
+    // The stave is drawn to fit the container, so it has to be redrawn when the
+    // container changes size. Without this it only re-measures when the grid
+    // changes, and anything that resizes it in place — the live score panel
+    // appearing beside it, or the window being dragged — leaves the stave at
+    // its old width, overflowing into a scrollbar.
+    const [availableWidth, setAvailableWidth] = useState(0);
+    useEffect(() => {
+        const el = wrapperRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(([entry]) => {
+            const w = Math.round(entry.contentRect.width);
+            // Round-trip guard: redrawing changes the SVG width, which can nudge
+            // the wrapper by a pixel and start an observer loop.
+            setAvailableWidth(prev => (Math.abs(prev - w) > 2 ? w : prev));
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
+
     const applyScoreColours = () => {
         const scores = cellScoresRef.current;
         for (const [key, paths] of noteElsRef.current) {
@@ -240,9 +259,9 @@ export const NotationView = ({
     useEffect(() => {
         if (!containerRef.current || !wrapperRef.current) return;
 
-        const availableWidth = wrapperRef.current.offsetWidth || 900;
-        const naturalWidth   = Math.max(300, beats * subdiv * 30 + 120);
-        const staveWidth     = Math.min(naturalWidth, availableWidth - 20);
+        const measured     = availableWidth || wrapperRef.current.offsetWidth || 900;
+        const naturalWidth = Math.max(300, beats * subdiv * 30 + 120);
+        const staveWidth   = Math.min(naturalWidth, measured - 20);
 
         containerRef.current.innerHTML = '';
 
@@ -425,7 +444,7 @@ export const NotationView = ({
             else if (lastX !== null) { stepX[s] = lastX; }
         }
         stepXRef.current = stepX;
-    }, [grid, beats, subdiv, mutedTracks, tripletGrid]);
+    }, [grid, beats, subdiv, mutedTracks, tripletGrid, availableWidth]);
 
     // Recolour in place. Deliberately not a dependency of the render effect
     // above: scores land several times a second and re-running VexFlow that

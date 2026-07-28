@@ -16,10 +16,15 @@ export const DEFAULT_WINDOWS = {
 
 export const VERDICTS = ['good', 'early', 'late', 'miss', 'extra'];
 
+// Early and late are deliberately a cool/warm pair rather than two shades of
+// one hue: temperature reads as direction at a glance, so you can tell which
+// way you are drifting without stopping to read a number. It also keeps the two
+// distinguishable for red-green colour blindness, where the green/red pair is
+// the weak point of this palette.
 export const VERDICT_COLOURS = {
     good: '#16a34a',   // green-600
-    early: '#f59e0b',  // amber-500
-    late: '#f59e0b',
+    early: '#0ea5e9',  // sky-500 — cool, ahead of the beat
+    late: '#f59e0b',   // amber-500 — warm, behind it
     miss: '#dc2626',   // red-600
     extra: '#9333ea',  // purple-600
 };

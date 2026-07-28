@@ -8,13 +8,10 @@ const label = 'text-[9px] font-bold uppercase text-gray-500';
 
 // ── Compact header strip ─────────────────────────────────────────────────────
 export function PracticeBar({ practice }) {
-    const { enabled, setEnabled, setSetupOpen, midi, passStats, calibration } = practice;
+    const { enabled, setEnabled, setSetupOpen, midi } = practice;
 
     const connected = midi.status === 'granted' && midi.selectedId;
     const deviceName = midi.inputs.find(i => i.id === midi.selectedId)?.name;
-
-    const accuracy = passStats ? Math.round(passStats.accuracy * 100) : null;
-    const offset = passStats?.meanOffsetMs;
 
     return (
         <>
@@ -37,33 +34,8 @@ export function PracticeBar({ practice }) {
                 <Sliders size={14} />
             </button>
 
-            {enabled && (
-                <div className="flex items-center gap-3 border-2 border-black px-3 h-10 bg-white">
-                    <div className="flex flex-col leading-none">
-                        <span className={label}>ON TIME</span>
-                        <span className="text-base font-black tabular-nums">
-                            {accuracy === null ? '—' : `${accuracy}%`}
-                        </span>
-                    </div>
-                    <div className="w-px h-6 bg-gray-300" />
-                    <div className="flex flex-col leading-none">
-                        <span className={label}>FEEL</span>
-                        <span className="text-[11px] font-bold tabular-nums">
-                            {offset == null ? '—'
-                                : Math.abs(offset) < 8 ? 'LOCKED'
-                                : offset < 0 ? `RUSHING ${Math.abs(Math.round(offset))}ms`
-                                : `DRAGGING ${Math.round(offset)}ms`}
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {enabled && calibration.offsetMs === 0 && !calibration.manual && (
-                <span className="text-[9px] font-bold uppercase text-amber-600 border-2 border-amber-500 px-2 py-1">
-                    Not calibrated
-                </span>
-            )}
-
+            {/* Accuracy and feel now live in ScorePanel beside the notation,
+                where there is room to read them mid-phrase. */}
             {enabled && deviceName && (
                 <span className="text-[9px] font-bold uppercase text-gray-400 truncate max-w-[140px]">
                     {deviceName}
@@ -408,24 +380,145 @@ export function PracticeSetupModal({ practice }) {
     );
 }
 
-// ── Legend ───────────────────────────────────────────────────────────────────
-export function ScoreLegend({ extraCount }) {
-    const items = [
-        ['On time', VERDICT_COLOURS.good],
-        ['Early / late', VERDICT_COLOURS.early],
-        ['Missed', VERDICT_COLOURS.miss],
+// ── Live score panel ─────────────────────────────────────────────────────────
+// Sits beside the notation, in space the centred stave was leaving empty. Sized
+// to be readable from playing distance rather than from a mouse.
+export function ScorePanel({ practice, windows }) {
+    const { passStats, recentHits, extraCount, calibration } = practice;
+
+    const accuracy = passStats ? Math.round(passStats.accuracy * 100) : null;
+    const offset = passStats?.meanOffsetMs;
+
+    // The meter spans the "counts as a hit" window, so a mark's distance from
+    // centre is directly how much of the tolerance was used up.
+    const span = windows.loose;
+    const positionPct = (deltaMs) =>
+        50 + Math.max(-50, Math.min(50, (deltaMs / span) * 50));
+
+    const counts = passStats?.counts;
+    const tally = [
+        ['On time', counts?.good ?? 0, VERDICT_COLOURS.good],
+        ['Early', counts?.early ?? 0, VERDICT_COLOURS.early],
+        ['Late', counts?.late ?? 0, VERDICT_COLOURS.late],
+        ['Missed', counts?.miss ?? 0, VERDICT_COLOURS.miss],
+        ['Extra', extraCount, VERDICT_COLOURS.extra],
     ];
+
+    const feelColour = offset == null ? '#000'
+        : Math.abs(offset) < 8 ? VERDICT_COLOURS.good
+            : offset < 0 ? VERDICT_COLOURS.early : VERDICT_COLOURS.late;
+
     return (
-        <div className="flex items-center gap-3 text-[9px] font-bold uppercase text-gray-500">
-            {items.map(([text, colour]) => (
-                <span key={text} className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 border border-black" style={{ backgroundColor: colour }} />
-                    {text}
-                </span>
-            ))}
-            {extraCount > 0 && (
-                <span style={{ color: VERDICT_COLOURS.extra }}>{extraCount} extra hits</span>
-            )}
+        <div className="w-[290px] flex-shrink-0 border-2 border-black bg-white flex flex-col">
+            <div className="bg-black text-white px-3 py-1 flex items-center gap-2">
+                <Activity size={11} />
+                <h3 className="text-[10px] font-black uppercase tracking-wide">Live timing</h3>
+                {calibration.offsetMs === 0 && !calibration.manual && !calibration.fromLivePlay && (
+                    <span className="ml-auto text-[8px] font-bold uppercase text-amber-400">
+                        Uncalibrated
+                    </span>
+                )}
+            </div>
+
+            <div className="p-3 space-y-3 flex-1">
+
+                {/* ── Headline accuracy ── */}
+                <div className="flex items-end justify-between">
+                    <div className="leading-none">
+                        <div className="text-5xl font-black tabular-nums">
+                            {accuracy === null ? '—' : accuracy}
+                            {accuracy !== null && <span className="text-2xl">%</span>}
+                        </div>
+                        <div className={`${label} mt-1`}>On time, last pass</div>
+                    </div>
+                    <div className="text-right leading-none">
+                        <div
+                            className="text-lg font-black tabular-nums"
+                            style={{ color: feelColour }}
+                        >
+                            {offset == null ? '—' : `${offset > 0 ? '+' : ''}${Math.round(offset)}`}
+                            {offset != null && <span className="text-xs">ms</span>}
+                        </div>
+                        <div className={`${label} mt-1`}>
+                            {offset == null ? 'Feel'
+                                : Math.abs(offset) < 8 ? 'Locked'
+                                    : offset < 0 ? 'Rushing' : 'Dragging'}
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Timing meter ── */}
+                {/* One mark per recent note, oldest faintest, so the drift of a
+                    whole phrase is visible rather than just the last hit. */}
+                <div>
+                    <div className="flex justify-between mb-1">
+                        <span className="text-[8px] font-bold uppercase" style={{ color: VERDICT_COLOURS.early }}>
+                            ◀ Early
+                        </span>
+                        <span className={label}>±{span}ms</span>
+                        <span className="text-[8px] font-bold uppercase" style={{ color: VERDICT_COLOURS.late }}>
+                            Late ▶
+                        </span>
+                    </div>
+
+                    <div className="relative h-14 border-2 border-black bg-gray-50 overflow-hidden">
+                        {/* on-time band */}
+                        <div
+                            className="absolute inset-y-0"
+                            style={{
+                                left: `${positionPct(-windows.tight)}%`,
+                                right: `${100 - positionPct(windows.tight)}%`,
+                                backgroundColor: `${VERDICT_COLOURS.good}22`,
+                            }}
+                        />
+                        {/* centre line */}
+                        <div className="absolute inset-y-0 left-1/2 w-px bg-black opacity-60" />
+
+                        {recentHits.map((h, i) => {
+                            if (h.deltaMs == null) return null;
+                            const age = recentHits.length - i;
+                            return (
+                                <div
+                                    key={h.id}
+                                    title={`${h.instrument} ${h.deltaMs > 0 ? '+' : ''}${Math.round(h.deltaMs)}ms`}
+                                    className="absolute w-[3px] rounded-sm"
+                                    style={{
+                                        left: `calc(${positionPct(h.deltaMs)}% - 1.5px)`,
+                                        top: '6%',
+                                        height: '88%',
+                                        backgroundColor: VERDICT_COLOURS[h.verdict],
+                                        opacity: Math.max(0.18, 1 - age * 0.06),
+                                    }}
+                                />
+                            );
+                        })}
+
+                        {recentHits.length === 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-[9px] font-bold uppercase text-gray-400">
+                                    Play to see timing
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Tally ── */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                    {tally.map(([text, count, colour]) => (
+                        <div key={text} className="flex items-center gap-1.5">
+                            <span
+                                className="w-2.5 h-2.5 border border-black flex-shrink-0"
+                                style={{ backgroundColor: colour }}
+                            />
+                            <span className="text-[9px] font-bold uppercase text-gray-500 flex-1 truncate">
+                                {text}
+                            </span>
+                            <span className="text-[11px] font-black tabular-nums">{count}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }

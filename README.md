@@ -140,14 +140,31 @@ notehead take a colour:
 | Colour | Meaning |
 | --- | --- |
 | Green | On time |
-| Amber | Early or late, but close enough to count |
+| Blue | Early — ahead of the beat, but close enough to count |
+| Amber | Late — behind the beat, but close enough to count |
 | Red | Missed |
-| Purple count | Hits that did not belong to any note in the pattern |
+| Purple | Hits that did not belong to any note in the pattern |
 
-The header shows the percentage of notes you hit dead on, and a **feel**
-readout: whether you are rushing or dragging, and by how much. That signed
-number is usually more useful than the percentage, because it tells you which
-way to correct.
+Early and late are a cool/warm pair rather than two shades of one colour, so you
+can read the direction of an error at a glance without stopping to check a
+number.
+
+### The live timing panel
+
+Beside the notation, in the space the centred stave leaves empty, sits a
+real-time feedback panel:
+
+- **Percentage on time** for the last pass through the bar
+- **Feel** — the signed average offset, coloured to match. Usually more useful
+  than the percentage, because it tells you which way to correct
+- **A timing meter** plotting the last 32 notes across the full match window,
+  with the on-time band shaded and older hits fading out. A drifting phrase
+  shows up as marks sliding to one side, which is much easier to see than a
+  changing number
+- **A tally** of on time, early, late, missed and extra
+
+Hover any mark on the meter, or any coloured cell, for the exact millisecond
+offset.
 
 Hover any coloured cell to see the exact millisecond offset.
 

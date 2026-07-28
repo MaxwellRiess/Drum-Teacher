@@ -7,7 +7,7 @@ import { Play, Pause, X, Music, Sparkles, Download, Terminal, ChevronDown, Link,
 import { encodeState, decodeState } from '../utils/patternUrl';
 import { usePracticeMode } from '../hooks/usePracticeMode';
 import { maskApiKey } from '../utils/apiKey';
-import { PracticeBar, PracticeSetupModal, ScoreLegend } from '../components/PracticePanel';
+import { PracticeBar, PracticeSetupModal, ScorePanel } from '../components/PracticePanel';
 import { VERDICT_COLOURS } from '../utils/scoring';
 
 // Accent color shown when the playhead hits an active pad
@@ -268,22 +268,30 @@ export default function Design1() {
 
             </div>
 
-            {/* ── NOTATION (full width, fixed height) ── */}
-            <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-1 flex-shrink-0">
-                <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center justify-between gap-1 text-gray-400">
-                    <span className="flex items-center gap-1"><Music size={9} /> VISUAL_NOTATION</span>
-                    {practice.enabled && <ScoreLegend extraCount={practice.extraCount} />}
+            {/* ── NOTATION + LIVE SCORE ── */}
+            {/* The stave is centred, so with practice mode on the panel takes
+                space that was otherwise empty rather than costing the notation
+                any width it was using. */}
+            <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-2 flex-shrink-0 flex gap-3 items-stretch">
+                <div className="flex-1 min-w-0">
+                    <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1 text-gray-400">
+                        <Music size={9} /> VISUAL_NOTATION
+                    </div>
+                    <NotationView
+                        grid={machine.grid}
+                        beats={machine.beats}
+                        subdiv={machine.subdiv}
+                        currentStep={machine.currentStep}
+                        mutedTracks={machine.mutedTracks}
+                        activeRudiment={machine.activeRudiment}
+                        tripletGrid={machine.tripletGrid}
+                        cellScores={practice.enabled ? practice.cellScores : null}
+                    />
                 </div>
-                <NotationView
-                    grid={machine.grid}
-                    beats={machine.beats}
-                    subdiv={machine.subdiv}
-                    currentStep={machine.currentStep}
-                    mutedTracks={machine.mutedTracks}
-                    activeRudiment={machine.activeRudiment}
-                    tripletGrid={machine.tripletGrid}
-                    cellScores={practice.enabled ? practice.cellScores : null}
-                />
+
+                {practice.enabled && (
+                    <ScorePanel practice={practice} windows={practice.settings.windows} />
+                )}
             </div>
 
             {/* ── SEQUENCER GRID (fills all remaining height) ── */}

@@ -70,6 +70,10 @@ export const usePracticeMode = ({ machine }) => {
     // from passStats.meanOffsetMs, which only averages hits that matched — and
     // so goes blank in exactly the situation this is for.
     const [timingDiag, setTimingDiag] = useState(null);
+    // Last few notes in resolution order, for the scrolling timing meter. Kept
+    // separate from cellScores, which is keyed by cell and so has no sense of
+    // sequence.
+    const [recentHits, setRecentHits] = useState([]);
 
     // ── Hot-path refs (never cause renders) ─────────────────────────────────
     const hitsRef = useRef([]);
@@ -84,6 +88,7 @@ export const usePracticeMode = ({ machine }) => {
     const extraCountRef = useRef(0);
     const cleanRunRef = useRef(0);
     const diagRef = useRef(new Map());
+    const recentHitsRef = useRef([]);
 
     const noteLookupRef = useRef(buildNoteLookup(midiMap));
     const settingsRef = useRef(settings);
@@ -183,11 +188,13 @@ export const usePracticeMode = ({ machine }) => {
         cleanRunRef.current = 0;
         dirtyRef.current = false;
         diagRef.current = new Map();
+        recentHitsRef.current = [];
         setCellScores({});
         setPassStats(null);
         setRecentPasses([]);
         setExtraCount(0);
         setTimingDiag(null);
+        setRecentHits([]);
     }, []);
 
     // Clear scores whenever a run starts or practice mode is toggled
@@ -266,6 +273,13 @@ export const usePracticeMode = ({ machine }) => {
                         verdict: result.verdict,
                         deltaMs: result.deltaMs,
                     };
+                    recentHitsRef.current.push({
+                        id: note.key,
+                        verdict: result.verdict,
+                        deltaMs: result.deltaMs,
+                        instrument: instruments[note.instrumentIndex]?.name ?? '',
+                    });
+                    if (recentHitsRef.current.length > 32) recentHitsRef.current.shift();
                     dirtyRef.current = true;
 
                     if (!barResultsRef.current.has(note.bar)) barResultsRef.current.set(note.bar, []);
@@ -306,6 +320,7 @@ export const usePracticeMode = ({ machine }) => {
                     dirtyRef.current = false;
                     setCellScores({ ...cellScoresRef.current });
                     setExtraCount(extraCountRef.current);
+                    setRecentHits([...recentHitsRef.current]);
 
                     // Trust the sparsest drum: it has the widest unambiguous
                     // measuring range, so it is the one that can still see a
@@ -489,7 +504,7 @@ export const usePracticeMode = ({ machine }) => {
         midiMap, learnTarget, setLearnTarget, clearMapping, resetMapping,
         settings, updateSettings,
         calibration, calibrating, calibrationProgress, startCalibration, setCalibrationOffset,
-        cellScores, passStats, recentPasses, extraCount,
+        cellScores, passStats, recentPasses, extraCount, recentHits,
         timingDiag, applySuggestedOffset,
         resetScoring,
     };
