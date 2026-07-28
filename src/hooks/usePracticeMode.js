@@ -60,6 +60,9 @@ export const usePracticeMode = ({ machine }) => {
     );
     const [calibrating, setCalibrating] = useState(false);
     const [calibrationProgress, setCalibrationProgress] = useState(0);
+    // So a failure to start is always visible. The previous silent return left
+    // the button looking inert with no way to tell what had gone wrong.
+    const [calibrationError, setCalibrationError] = useState(null);
 
     // Scoring output, flushed to state on a throttle
     const [cellScores, setCellScores] = useState({});
@@ -391,10 +394,24 @@ export const usePracticeMode = ({ machine }) => {
     // camera frame quantisation, USB MIDI, CoreMIDI, the browser, and the
     // app's own audio output latency. Without this every hit reads as late.
     const startCalibration = useCallback(async () => {
-        const ctx = machine.getAudioContext();
-        if (!ctx) return;
+        setCalibrationError(null);
 
-        // Nudge the context awake — calibration may run before first playback
+        // Build the audio context if this is the first sound of the session.
+        // Calibration is usually the very first thing a new user does — before
+        // ever pressing play — and the context is only created lazily on first
+        // playback, so reading it here without creating it made the button do
+        // nothing at all, silently.
+        let ctx;
+        try {
+            ctx = await machine.initAudio();
+        } catch {
+            ctx = null;
+        }
+        if (!ctx) {
+            setCalibrationError('Could not start audio. Try pressing play once, then calibrate.');
+            return;
+        }
+
         if (ctx.state === 'suspended') await ctx.resume();
         bridgeRef.current = new ClockBridge(ctx);
 
@@ -503,7 +520,8 @@ export const usePracticeMode = ({ machine }) => {
         midi,
         midiMap, learnTarget, setLearnTarget, clearMapping, resetMapping,
         settings, updateSettings,
-        calibration, calibrating, calibrationProgress, startCalibration, setCalibrationOffset,
+        calibration, calibrating, calibrationProgress, calibrationError,
+        startCalibration, setCalibrationOffset,
         cellScores, passStats, recentPasses, extraCount, recentHits,
         timingDiag, applySuggestedOffset,
         resetScoring,

@@ -554,6 +554,16 @@ export const useDrumMachine = () => {
 
     const getAudioContext = useCallback(() => audioRef.current.ctx, []);
 
+    // Creates the audio context if it does not exist yet and resumes it.
+    // Anything that needs to make a sound without going through play — the
+    // calibration click track, for one — has to call this first, because the
+    // context is only built lazily on the first play or first cell preview.
+    // Must be reached from a user gesture or the browser will not start audio.
+    const initAudio = useCallback(async () => {
+        await audioRef.current.init();
+        return audioRef.current.ctx;
+    }, []);
+
     const loadRudiment = (rudiment) => {
         const newGrid = instruments.map(() => Array(totalSteps).fill(false));
         const snareIndex = instruments.findIndex(i => i.id === 'snare');
@@ -589,6 +599,7 @@ export const useDrumMachine = () => {
         // Refs rather than state: practice mode polls these from its own rAF
         // loop, so nothing here triggers a React render.
         getAudioContext,
+        initAudio,
         expectedRef,
         playInstrument,
     };

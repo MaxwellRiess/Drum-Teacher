@@ -51,7 +51,8 @@ export function PracticeSetupModal({ practice }) {
         setupOpen, setSetupOpen, midi,
         midiMap, learnTarget, setLearnTarget, clearMapping, resetMapping,
         settings, updateSettings,
-        calibration, calibrating, calibrationProgress, startCalibration, setCalibrationOffset,
+        calibration, calibrating, calibrationProgress, calibrationError,
+        startCalibration, setCalibrationOffset,
         recentPasses, timingDiag, applySuggestedOffset,
     } = practice;
 
@@ -189,6 +190,10 @@ export function PracticeSetupModal({ practice }) {
                                 </span>
                             )}
                         </div>
+
+                        {calibrationError && (
+                            <p className="text-[11px] font-bold text-red-600">{calibrationError}</p>
+                        )}
 
                         {calibrating && (
                             <div className="h-2 border-2 border-black">

@@ -95,11 +95,13 @@ Three things about this that are easy to get wrong:
    or swing changed mid-loop. The list is kept sorted by time because triplet
    notes are all scheduled at their beat boundary and so interleave with the
    grid steps that follow them.
-3. **Calibration measures the RAW hit time, never the corrected one.** `handleNoteOn` subtracts the stored offset before scoring, but pushes the uncorrected time into the calibration samples. Feeding the corrected time in would make each run measure only the residual left by the previous run and then overwrite the offset with it — so a second calibration would reset a good offset back to roughly zero.
+3. **The audio context is created lazily, so anything that makes a sound outside playback must call `machine.initAudio()` first.** `audioRef.current.ctx` is null until `DrumSynth.init()` runs, which happens on first play or first cell preview. Calibration is typically the first thing a new user does, before ever pressing play — reading `getAudioContext()` without creating it made the button silently do nothing. `initAudio()` must be reached from a user gesture or the browser will refuse to start audio.
 
-4. **Nearest-match measurement aliases, and the fix is to pick the sparsest drum.** A hit later than half the gap between notes on that drum lands nearer the *following* note, so a 250 ms latency on sixteenth-note hi-hats (272 ms apart) reads as 22 ms early. This is not detectable within one drum. `timingDiag` therefore collects per instrument alongside `neighbourGapMs` and reports whichever has the widest spacing. Calibration sidesteps the same problem by clicking every 0.9 s, giving a ±450 ms unambiguous range — it was 0.6 s with a 0.2 s tolerance, which rejected the samples of any rig near 200 ms latency and told it "too few hits detected".
+4. **Calibration measures the RAW hit time, never the corrected one.** `handleNoteOn` subtracts the stored offset before scoring, but pushes the uncorrected time into the calibration samples. Feeding the corrected time in would make each run measure only the residual left by the previous run and then overwrite the offset with it — so a second calibration would reset a good offset back to roughly zero.
 
-5. **A hit is only an `extra` after two match windows, not one.** A note at time
+5. **Nearest-match measurement aliases, and the fix is to pick the sparsest drum.** A hit later than half the gap between notes on that drum lands nearer the *following* note, so a 250 ms latency on sixteenth-note hi-hats (272 ms apart) reads as 22 ms early. This is not detectable within one drum. `timingDiag` therefore collects per instrument alongside `neighbourGapMs` and reports whichever has the widest spacing. Calibration sidesteps the same problem by clicking every 0.9 s, giving a ±450 ms unambiguous range — it was 0.6 s with a 0.2 s tolerance, which rejected the samples of any rig near 200 ms latency and told it "too few hits detected".
+
+6. **A hit is only an `extra` after two match windows, not one.** A note at time
    T can claim hits in `[T-loose, T+loose]` and isn't itself resolved until
    `T+loose`, so an early hit is still claimable until `H + 2·loose`. Using one
    window double-counts every early hit as both `early` and `extra`.
