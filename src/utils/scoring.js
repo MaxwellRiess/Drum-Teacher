@@ -130,6 +130,43 @@ export function collectExtras(hits, nowAudioTime, windows = DEFAULT_WINDOWS) {
         });
 }
 
+// Distance from an expected note to the closest hit on the same drum, with no
+// window applied at all.
+//
+// This is the diagnostic that `matchExpected` cannot give you: once a hit falls
+// outside `loose` it is simply a miss, and a miss reports no offset — so a
+// setup that is uniformly 300 ms out looks identical to one where the drummer
+// played nothing. Measuring without a window is what makes a large constant
+// latency visible instead of silent.
+export function nearestDeltaMs(expected, hits, searchSeconds = 1.5) {
+    let best = null;
+    for (const hit of hits) {
+        if (hit.instrumentIndex !== expected.instrumentIndex) continue;
+        const delta = (hit.audioTime - expected.time) * 1000;
+        if (Math.abs(delta) > searchSeconds * 1000) continue;
+        if (best === null || Math.abs(delta) < Math.abs(best)) best = delta;
+    }
+    return best;
+}
+
+// Gap in ms from a note to its closest neighbour on the same drum.
+//
+// This is what bounds a nearest-match measurement. Hi-hats 272 ms apart cannot
+// distinguish "250 ms late" from "22 ms early on the next one" — the late hit
+// simply aliases onto the following note and reports a small, healthy-looking
+// number. The usable range is half the gap, so a sparse track (a kick landing
+// twice a bar) measures a large latency that a busy one structurally cannot.
+export function neighbourGapMs(expected, allExpected) {
+    let best = null;
+    for (const other of allExpected) {
+        if (other === expected) continue;
+        if (other.instrumentIndex !== expected.instrumentIndex) continue;
+        const gap = Math.abs(other.time - expected.time) * 1000;
+        if (gap > 0 && (best === null || gap < best)) best = gap;
+    }
+    return best;
+}
+
 // Median is the right statistic for latency calibration: a couple of badly
 // mistimed taps during the routine shouldn't drag the offset.
 export function median(values) {

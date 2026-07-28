@@ -6,15 +6,23 @@ import {
     loadMidiMap, saveMidiMap, buildNoteLookup, assignNote, clearInstrument, DEFAULT_MIDI_MAP,
 } from '../utils/midiMap';
 import {
-    DEFAULT_WINDOWS, matchExpected, summarise, collectExtras, median,
+    DEFAULT_WINDOWS, matchExpected, summarise, collectExtras, median, nearestDeltaMs, neighbourGapMs,
 } from '../utils/scoring';
 
 const CALIBRATION_KEY = 'drumTeacher.calibration.v1';
 const SETTINGS_KEY = 'drumTeacher.practiceSettings.v1';
 
 const CALIBRATION_CLICKS = 16;
-const CALIBRATION_INTERVAL = 0.6;   // seconds between clicks (100 bpm)
-const CALIBRATION_TOLERANCE = 0.2;  // seconds either side of a click
+
+// Slower than a musical click on purpose. Each hit is matched to its nearest
+// click, so the largest offset that can be measured without ambiguity is half
+// the interval. At the original 0.6 s the ceiling was 300 ms, and the 200 ms
+// tolerance cut it to less — which meant a rig whose true latency was around
+// 200 ms had its samples rejected and was told "too few hits detected". The
+// setups most in need of calibration were exactly the ones it refused to
+// measure. At 0.9 s the measurable range is ±450 ms.
+const CALIBRATION_INTERVAL = 0.9;
+const CALIBRATION_TOLERANCE = CALIBRATION_INTERVAL / 2;
 
 const FLUSH_INTERVAL_MS = 50;
 
@@ -58,6 +66,10 @@ export const usePracticeMode = ({ machine }) => {
     const [passStats, setPassStats] = useState(null);
     const [recentPasses, setRecentPasses] = useState([]);
     const [extraCount, setExtraCount] = useState(0);
+    // Window-free view of how far hits are landing from their notes. Distinct
+    // from passStats.meanOffsetMs, which only averages hits that matched — and
+    // so goes blank in exactly the situation this is for.
+    const [timingDiag, setTimingDiag] = useState(null);
 
     // ── Hot-path refs (never cause renders) ─────────────────────────────────
     const hitsRef = useRef([]);
@@ -71,6 +83,7 @@ export const usePracticeMode = ({ machine }) => {
     const lastBarRef = useRef(-1);
     const extraCountRef = useRef(0);
     const cleanRunRef = useRef(0);
+    const diagRef = useRef(new Map());
 
     const noteLookupRef = useRef(buildNoteLookup(midiMap));
     const settingsRef = useRef(settings);
@@ -81,7 +94,7 @@ export const usePracticeMode = ({ machine }) => {
     // Calibration state lives in refs so the click scheduler doesn't re-render
     const calibratingRef = useRef(false);
     const calibClicksRef = useRef([]);
-    const calibDeltasRef = useRef([]);
+    const calibSamplesRef = useRef([]);
 
     useEffect(() => { noteLookupRef.current = buildNoteLookup(midiMap); }, [midiMap]);
     useEffect(() => { settingsRef.current = settings; }, [settings]);
@@ -125,7 +138,11 @@ export const usePracticeMode = ({ machine }) => {
         const audioTime = rawAudioTime - calibrationRef.current.offsetMs / 1000;
 
         if (calibratingRef.current) {
-            calibDeltasRef.current.push({ audioTime });
+            // Deliberately the RAW time. Feeding the already-corrected time in
+            // here would make each run measure only the residual left by the
+            // previous run and then overwrite the offset with it — so a second
+            // calibration would reset a correct offset back to roughly zero.
+            calibSamplesRef.current.push({ rawAudioTime });
             return;
         }
 
@@ -165,10 +182,12 @@ export const usePracticeMode = ({ machine }) => {
         extraCountRef.current = 0;
         cleanRunRef.current = 0;
         dirtyRef.current = false;
+        diagRef.current = new Map();
         setCellScores({});
         setPassStats(null);
         setRecentPasses([]);
         setExtraCount(0);
+        setTimingDiag(null);
     }, []);
 
     // Clear scores whenever a run starts or practice mode is toggled
@@ -217,6 +236,29 @@ export const usePracticeMode = ({ machine }) => {
                     // The metronome is a click track, not something you play
                     if (instruments[note.instrumentIndex]?.id === 'metronome') continue;
 
+                    // Measured before matching, and with no window, so a rig
+                    // that is uniformly hundreds of milliseconds out still
+                    // reports a number instead of a silent wall of misses.
+                    //
+                    // Kept per instrument together with that instrument's note
+                    // spacing, because a measurement is only meaningful out to
+                    // half the spacing — beyond that a late hit aliases onto the
+                    // next note and reads as a small early one. The flush picks
+                    // whichever drum has the widest spacing.
+                    const rawDelta = nearestDeltaMs(note, hitsRef.current);
+                    if (rawDelta !== null) {
+                        const gapMs = neighbourGapMs(note, expected);
+                        if (gapMs === null || Math.abs(rawDelta) < gapMs / 2) {
+                            const key = note.instrumentIndex;
+                            const entry = diagRef.current.get(key)
+                                ?? { gapMs: gapMs ?? Infinity, deltas: [] };
+                            entry.gapMs = Math.min(entry.gapMs, gapMs ?? Infinity);
+                            entry.deltas.push(rawDelta);
+                            if (entry.deltas.length > 40) entry.deltas.shift();
+                            diagRef.current.set(key, entry);
+                        }
+                    }
+
                     const result = matchExpected(note, hitsRef.current, windows);
 
                     const cellKey = `${note.isTriplet ? 't' : 's'}${note.step}:${note.instrumentIndex}`;
@@ -264,6 +306,36 @@ export const usePracticeMode = ({ machine }) => {
                     dirtyRef.current = false;
                     setCellScores({ ...cellScoresRef.current });
                     setExtraCount(extraCountRef.current);
+
+                    // Trust the sparsest drum: it has the widest unambiguous
+                    // measuring range, so it is the one that can still see a
+                    // large latency rather than aliasing it away.
+                    let bestEntry = null;
+                    let bestInst = null;
+                    for (const [inst, entry] of diagRef.current) {
+                        if (entry.deltas.length < 4) continue;
+                        if (!bestEntry || entry.gapMs > bestEntry.gapMs) {
+                            bestEntry = entry;
+                            bestInst = inst;
+                        }
+                    }
+                    if (bestEntry) {
+                        const med = median(bestEntry.deltas);
+                        setTimingDiag({
+                            count: bestEntry.deltas.length,
+                            medianMs: Math.round(med),
+                            instrument: instruments[bestInst]?.name ?? '',
+                            // How far the measurement can be trusted before
+                            // aliasing makes it meaningless.
+                            reliableToMs: Number.isFinite(bestEntry.gapMs)
+                                ? Math.round(bestEntry.gapMs / 2) : null,
+                            // Hits landing consistently +N ms from their notes
+                            // means the pipeline delay is N ms larger than what
+                            // is currently being subtracted.
+                            suggestedOffsetMs:
+                                Math.round((calibrationRef.current.offsetMs + med) * 10) / 10,
+                        });
+                    }
                 }
             }
             frame = requestAnimationFrame(tick);
@@ -312,7 +384,7 @@ export const usePracticeMode = ({ machine }) => {
         bridgeRef.current = new ClockBridge(ctx);
 
         calibClicksRef.current = [];
-        calibDeltasRef.current = [];
+        calibSamplesRef.current = [];
         calibratingRef.current = true;
         setCalibrating(true);
         setCalibrationProgress(0);
@@ -341,15 +413,15 @@ export const usePracticeMode = ({ machine }) => {
             // are dropped — people are still finding the pulse.
             const clicks = calibClicksRef.current.slice(2);
             const deltas = [];
-            for (const hit of calibDeltasRef.current) {
+            for (const hit of calibSamplesRef.current) {
                 let best = null;
                 let bestDistance = Infinity;
                 for (const click of clicks) {
-                    const d = Math.abs(hit.audioTime - click);
+                    const d = Math.abs(hit.rawAudioTime - click);
                     if (d < bestDistance) { bestDistance = d; best = click; }
                 }
                 if (best !== null && bestDistance <= CALIBRATION_TOLERANCE) {
-                    deltas.push((hit.audioTime - best) * 1000);
+                    deltas.push((hit.rawAudioTime - best) * 1000);
                 }
             }
 
@@ -367,6 +439,27 @@ export const usePracticeMode = ({ machine }) => {
             }
         }, totalMs);
     }, [machine]);
+
+    // Takes the offset the live diagnostic is suggesting and applies it, which
+    // is usually faster than re-running the click routine and works even when
+    // the drummer's timing is loose — the median is robust to that.
+    const applySuggestedOffset = useCallback(() => {
+        setTimingDiag(current => {
+            if (!current) return current;
+            const next = {
+                offsetMs: current.suggestedOffsetMs,
+                samples: current.count,
+                at: new Date().toISOString(),
+                fromLivePlay: true,
+            };
+            persist(CALIBRATION_KEY, next);
+            setCalibration(next);
+            // Everything already on screen was scored against the old offset,
+            // so clear it rather than leaving a bar of stale reds behind.
+            resetScoring();
+            return null;
+        });
+    }, [resetScoring]);
 
     const setCalibrationOffset = useCallback((offsetMs) => {
         const next = { offsetMs, samples: 0, at: new Date().toISOString(), manual: true };
@@ -397,6 +490,7 @@ export const usePracticeMode = ({ machine }) => {
         settings, updateSettings,
         calibration, calibrating, calibrationProgress, startCalibration, setCalibrationOffset,
         cellScores, passStats, recentPasses, extraCount,
+        timingDiag, applySuggestedOffset,
         resetScoring,
     };
 };

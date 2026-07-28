@@ -80,7 +80,7 @@ export function PracticeSetupModal({ practice }) {
         midiMap, learnTarget, setLearnTarget, clearMapping, resetMapping,
         settings, updateSettings,
         calibration, calibrating, calibrationProgress, startCalibration, setCalibrationOffset,
-        recentPasses,
+        recentPasses, timingDiag, applySuggestedOffset,
     } = practice;
 
     if (!setupOpen) return null;
@@ -229,9 +229,45 @@ export function PracticeSetupModal({ practice }) {
 
                         <Slider
                             text="Manual trim" value={calibration.offsetMs}
-                            min={-100} max={200} suffix=" ms"
+                            min={-200} max={600} suffix=" ms"
                             onChange={setCalibrationOffset}
                         />
+
+                        {/* Measured while you actually play, with no match window
+                            applied, so it still reports a number when every hit
+                            is being scored as a miss. */}
+                        {timingDiag && (
+                            <div className="border-2 border-black bg-gray-50 p-3 space-y-2">
+                                <div className="flex items-baseline gap-3">
+                                    <span className={label}>Measured while playing</span>
+                                    <span className="text-base font-black tabular-nums">
+                                        {timingDiag.medianMs > 0 ? '+' : ''}{timingDiag.medianMs} ms
+                                    </span>
+                                    <span className="text-[9px] text-gray-400 uppercase font-bold">
+                                        {timingDiag.count} hits · {timingDiag.instrument}
+                                        {timingDiag.reliableToMs ? ` · ±${timingDiag.reliableToMs}ms range` : ''}
+                                    </span>
+                                </div>
+
+                                <p className="text-[10px] text-gray-600 leading-relaxed">
+                                    {Math.abs(timingDiag.medianMs) <= settings.windows.tight
+                                        ? 'Your hits are landing on the notes. Nothing to correct.'
+                                        : `Your hits land a consistent ${Math.abs(timingDiag.medianMs)} ms ` +
+                                          `${timingDiag.medianMs > 0 ? 'after' : 'before'} their notes. ` +
+                                          `A steady offset this size is latency, not playing — correcting it ` +
+                                          `is what turns the grid green.`}
+                                </p>
+
+                                {Math.abs(timingDiag.medianMs) > settings.windows.tight && (
+                                    <button
+                                        onClick={applySuggestedOffset}
+                                        className="h-9 px-4 bg-black text-white font-bold text-xs uppercase hover:bg-neutral-700"
+                                    >
+                                        Set offset to {timingDiag.suggestedOffsetMs} ms
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </Section>
 
                     {/* ── Mapping ─────────────────────────────────────────── */}
@@ -291,9 +327,13 @@ export function PracticeSetupModal({ practice }) {
                         />
                         <Slider
                             text="Counts as a hit" value={settings.windows.loose}
-                            min={30} max={150} suffix=" ms"
+                            min={30} max={400} suffix=" ms"
                             onChange={v => updateSettings({ windows: { ...settings.windows, loose: Math.max(v, settings.windows.tight + 5) } })}
                         />
+                        <p className="text-[10px] text-gray-500 leading-relaxed">
+                            Widening this is not the fix for everything reading as a miss — that is
+                            a latency offset, and the diagnostic below measures it.
+                        </p>
                         <Slider
                             text="Velocity floor" value={settings.velocityFloor}
                             min={0} max={80}

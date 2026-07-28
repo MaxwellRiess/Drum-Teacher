@@ -151,6 +151,28 @@ way to correct.
 
 Hover any coloured cell to see the exact millisecond offset.
 
+### Everything reads as a miss
+
+Almost always latency, not playing. If your hits arrive a constant 200 ms after
+the notes, no tolerance setting will help — 200 ms is wider than any sensible
+match window, so every note is scored a miss and every hit becomes an extra.
+
+Play a few bars and open **Practice setup → Latency calibration**. The
+**Measured while playing** readout shows how far your hits are actually landing
+from their notes, with no match window applied, so it still reports a number
+when nothing is scoring. If it shows a large steady offset, press the button to
+apply it.
+
+That readout is measured from whichever drum in your pattern has the widest
+spacing between notes, and says which one. This matters: a hi-hat playing
+sixteenths at 110 bpm has notes 272 ms apart, and a hit 250 ms late lands nearer
+the *following* note, so it reads as 22 ms early rather than 250 ms late. A drum
+that plays twice a bar cannot alias that way, so it gives the honest number.
+
+Output latency is the usual culprit and it varies enormously by device —
+Bluetooth headphones can add 150–200 ms where wired output adds 30 ms. **Change
+your audio output and you need to calibrate again.**
+
 ### Click only
 
 **CLICK** in the toolbar silences the kit and leaves a bare pulse: one click per

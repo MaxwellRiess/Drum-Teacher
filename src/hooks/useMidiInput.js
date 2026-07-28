@@ -67,12 +67,24 @@ export const useMidiInput = ({ onNoteOn, verbose = false } = {}) => {
 
         if (!isNoteOn) return;
 
+        // event.timeStamp is meant to be in the performance.now() domain,
+        // stamped at receipt by the MIDI backend. If a browser ever stamps it
+        // in some other epoch, every hit lands somewhere absurd on the timeline
+        // and nothing ever matches. Sanity-check it and fall back to reading
+        // the clock here — less precise under load, but never catastrophically
+        // wrong.
+        const now = performance.now();
+        const stamped = event.timeStamp;
+        const trustworthy = typeof stamped === 'number'
+            && Number.isFinite(stamped)
+            && Math.abs(stamped - now) < 5000;
+
         onNoteOnRef.current?.({
             note,
             velocity,
             channel: statusByte & 0x0f,
-            // performance.now() domain, stamped at receipt by the MIDI backend
-            perfTime: event.timeStamp,
+            perfTime: trustworthy ? stamped : now,
+            stampSuspect: !trustworthy,
         });
     }, []);
 
