@@ -157,14 +157,20 @@ real-time feedback panel:
 - **Percentage on time** for the last pass through the bar
 - **Feel** — the signed average offset, coloured to match. Usually more useful
   than the percentage, because it tells you which way to correct
-- **A timing meter** plotting the last 32 notes across the full match window,
-  with the on-time band shaded and older hits fading out. A drifting phrase
-  shows up as marks sliding to one side, which is much easier to see than a
-  changing number
+- **A timing meter** with one lane per drum, plotting the last 32 notes across
+  the full match window. Lanes are what make it diagnostic: a kick that
+  consistently drags shows up as a whole row sitting right of centre while the
+  snare stays put, which tells you which limb to work on. The on-time band is
+  shaded and older marks fade out, so a phrase that drifts reads as marks
+  sliding across
 - **A tally** of on time, early, late, missed and extra
 
 Hover any mark on the meter, or any coloured cell, for the exact millisecond
 offset.
+
+The notation and the timing panel each have a hide control, and share the strip
+above the sequencer evenly. Hide one and the other takes the full width; hide
+both and the sequencer gets the space. The choice is remembered.
 
 **Press the expand icon** in the panel header to give the timing display the
 whole window, hiding the notation and grid. Useful once you know the beat and
@@ -179,6 +185,10 @@ Hover any coloured cell to see the exact millisecond offset.
 Almost always latency, not playing. If your hits arrive a constant 200 ms after
 the notes, no tolerance setting will help — 200 ms is wider than any sensible
 match window, so every note is scored a miss and every hit becomes an extra.
+
+Calibration shows a large beat counter that pulses on each click, so you can
+follow it by eye rather than trying to pick the click out from the kit sound,
+and it tells you live whether your hits are arriving at all.
 
 Play a few bars and open **Practice setup → Latency calibration**. The
 **Measured while playing** readout shows how far your hits are actually landing

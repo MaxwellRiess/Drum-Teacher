@@ -3,7 +3,7 @@ import { useDrumMachine, RUDIMENTS } from '../hooks/useDrumMachine';
 import { useAiDrummer } from '../hooks/useAiDrummer';
 import { NotationView } from '../components/NotationView';
 import { exportMidi } from '../utils/midiExport';
-import { Play, Pause, X, Music, Sparkles, Download, Terminal, ChevronDown, Link, VolumeX, KeyRound, ShieldCheck } from 'lucide-react';
+import { Play, Pause, X, Music, Sparkles, Download, Terminal, ChevronDown, Link, VolumeX, KeyRound, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { encodeState, decodeState } from '../utils/patternUrl';
 import { usePracticeMode } from '../hooks/usePracticeMode';
 import { maskApiKey } from '../utils/apiKey';
@@ -121,6 +121,19 @@ export default function Design1() {
     const practice = usePracticeMode({ machine });
     const [showRudiments, setShowRudiments] = useState(false);
     const [scoreExpanded, setScoreExpanded] = useState(false);
+    // Which of the two panes above the sequencer are showing. Persisted, since
+    // it is a working preference rather than a per-session choice.
+    const [paneVis, setPaneVis] = useState(() => {
+        try {
+            const raw = localStorage.getItem('drumTeacher.panes.v1');
+            return raw ? { notation: true, timing: true, ...JSON.parse(raw) } : { notation: true, timing: true };
+        } catch { return { notation: true, timing: true }; }
+    });
+    const setPane = (key, value) => setPaneVis(prev => {
+        const next = { ...prev, [key]: value };
+        try { localStorage.setItem('drumTeacher.panes.v1', JSON.stringify(next)); } catch { /* ignore */ }
+        return next;
+    });
     const [copied, setCopied] = useState(false);
     const [expandedTripletRows, setExpandedTripletRows] = useState(new Set());
 
@@ -179,6 +192,18 @@ export default function Design1() {
     }, [practice.enabled]);
 
     const showExpandedScore = practice.enabled && scoreExpanded;
+
+    // Timing only competes for space when practice mode is on.
+    const showTiming = practice.enabled && paneVis.timing;
+    const showNotation = paneVis.notation;
+    const stripHasContent = showTiming || showNotation;
+
+    // Lanes are driven by the pattern rather than by what has been played, so a
+    // drum you are missing completely still gets a visible empty row.
+    const activeInstruments = machine.instruments
+        .map((inst, i) => i)
+        .filter(i => machine.instruments[i].id !== 'metronome'
+            && (machine.grid[i]?.some(Boolean) || machine.tripletGrid[i]?.some(Boolean)));
 
     return (
         <div className="h-screen flex flex-col bg-[#f0f0f0] text-black font-mono overflow-hidden selection:bg-black selection:text-white">
@@ -293,31 +318,70 @@ export default function Design1() {
                     />
                 </div>
             ) : (
-                <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-2 flex-shrink-0 flex gap-3 items-stretch">
-                    <div className="flex-1 min-w-0">
-                        <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1 text-gray-400">
-                            <Music size={9} /> VISUAL_NOTATION
-                        </div>
-                        <NotationView
-                            grid={machine.grid}
-                            beats={machine.beats}
-                            subdiv={machine.subdiv}
-                            currentStep={machine.currentStep}
-                            mutedTracks={machine.mutedTracks}
-                            activeRudiment={machine.activeRudiment}
-                            tripletGrid={machine.tripletGrid}
-                            cellScores={practice.enabled ? practice.cellScores : null}
-                        />
-                    </div>
+                <>
+                    {stripHasContent && (
+                        <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-2 flex-shrink-0 flex gap-3 items-stretch">
+                            {/* Even split when both panes show; whichever is left
+                                takes the full width on its own. */}
+                            {showNotation && (
+                                <div className={`${showTiming ? 'w-1/2' : 'flex-1'} min-w-0 flex flex-col`}>
+                                    <div className="text-[9px] font-bold uppercase mb-0.5 flex items-center gap-1 text-gray-400">
+                                        <Music size={9} /> VISUAL_NOTATION
+                                        <button
+                                            onClick={() => setPane('notation', false)}
+                                            title="Hide notation"
+                                            className="ml-auto hover:text-black transition-colors"
+                                        >
+                                            <EyeOff size={11} />
+                                        </button>
+                                    </div>
+                                    <NotationView
+                                        grid={machine.grid}
+                                        beats={machine.beats}
+                                        subdiv={machine.subdiv}
+                                        currentStep={machine.currentStep}
+                                        mutedTracks={machine.mutedTracks}
+                                        activeRudiment={machine.activeRudiment}
+                                        tripletGrid={machine.tripletGrid}
+                                        cellScores={practice.enabled ? practice.cellScores : null}
+                                    />
+                                </div>
+                            )}
 
-                    {practice.enabled && (
-                        <ScorePanel
-                            practice={practice}
-                            windows={practice.settings.windows}
-                            onToggleExpand={() => setScoreExpanded(true)}
-                        />
+                            {showTiming && (
+                                <ScorePanel
+                                    practice={practice}
+                                    windows={practice.settings.windows}
+                                    activeInstruments={activeInstruments}
+                                    onToggleExpand={() => setScoreExpanded(true)}
+                                    onHide={() => setPane('timing', false)}
+                                />
+                            )}
+                        </div>
                     )}
-                </div>
+
+                    {/* Restore controls for whatever is hidden */}
+                    {(!showNotation || (practice.enabled && !paneVis.timing)) && (
+                        <div className="border-b-2 border-black bg-gray-50 px-3 py-1 flex-shrink-0 flex items-center gap-3">
+                            {!showNotation && (
+                                <button
+                                    onClick={() => setPane('notation', true)}
+                                    className="text-[9px] font-bold uppercase text-gray-400 hover:text-black flex items-center gap-1"
+                                >
+                                    <Eye size={11} /> Show notation
+                                </button>
+                            )}
+                            {practice.enabled && !paneVis.timing && (
+                                <button
+                                    onClick={() => setPane('timing', true)}
+                                    className="text-[9px] font-bold uppercase text-gray-400 hover:text-black flex items-center gap-1"
+                                >
+                                    <Eye size={11} /> Show live timing
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </>
             )}
 
             {!showExpandedScore && (<>

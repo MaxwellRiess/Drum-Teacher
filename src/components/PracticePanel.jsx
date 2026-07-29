@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Zap, X, Sliders, Radio, Timer, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
+import { Activity, Zap, X, Sliders, Radio, Timer, TrendingUp, Maximize2, Minimize2, EyeOff } from 'lucide-react';
 import { instruments } from '../hooks/useDrumMachine';
 import { VERDICT_COLOURS } from '../utils/scoring';
 
@@ -52,6 +52,7 @@ export function PracticeSetupModal({ practice }) {
         midiMap, learnTarget, setLearnTarget, clearMapping, resetMapping,
         settings, updateSettings,
         calibration, calibrating, calibrationProgress, calibrationError,
+        calibrationBeat, calibrationHitCount, calibrationClicks,
         startCalibration, setCalibrationOffset,
         recentPasses, timingDiag, applySuggestedOffset,
     } = practice;
@@ -196,11 +197,55 @@ export function PracticeSetupModal({ practice }) {
                         )}
 
                         {calibrating && (
-                            <div className="h-2 border-2 border-black">
-                                <div
-                                    className="h-full bg-black transition-all"
-                                    style={{ width: `${calibrationProgress * 100}%` }}
-                                />
+                            <div className="space-y-2">
+                                {/* Visual metronome. The click and the kit sound
+                                    similar enough that following by ear alone is
+                                    genuinely hard, so the beat is shown as well
+                                    as played. It fires on the click being HEARD,
+                                    not scheduled — see startCalibration. */}
+                                <div className="border-2 border-black bg-gray-50 p-4 flex items-center gap-5">
+                                    <div className="relative w-24 h-24 flex-shrink-0">
+                                        <div className="absolute inset-0 border-4 border-gray-300 rounded-full" />
+                                        <div
+                                            key={calibrationBeat}
+                                            className="absolute inset-0 rounded-full border-4 flex items-center justify-center"
+                                            style={{
+                                                borderColor: '#000',
+                                                backgroundColor: calibrationBeat >= 0 ? '#000' : 'transparent',
+                                                color: '#fff',
+                                                animation: calibrationBeat >= 0 ? 'calibPulse 320ms ease-out' : 'none',
+                                            }}
+                                        >
+                                            <span className="text-3xl font-black tabular-nums">
+                                                {calibrationBeat >= 0 ? calibrationBeat + 1 : '·'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex-1 space-y-1">
+                                        <p className="text-sm font-black uppercase">
+                                            {calibrationBeat < 0 ? 'Get ready…' : 'Hit any pad on each beat'}
+                                        </p>
+                                        <p className={label}>
+                                            Click {Math.max(0, calibrationBeat + 1)} of {calibrationClicks}
+                                        </p>
+                                        <p
+                                            className="text-[11px] font-bold uppercase"
+                                            style={{ color: calibrationHitCount > 0 ? VERDICT_COLOURS.good : '#dc2626' }}
+                                        >
+                                            {calibrationHitCount > 0
+                                                ? `${calibrationHitCount} hits received`
+                                                : 'No hits received yet'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="h-2 border-2 border-black">
+                                    <div
+                                        className="h-full bg-black transition-all"
+                                        style={{ width: `${calibrationProgress * 100}%` }}
+                                    />
+                                </div>
                             </div>
                         )}
 
@@ -388,7 +433,7 @@ export function PracticeSetupModal({ practice }) {
 // ── Live score panel ─────────────────────────────────────────────────────────
 // Sits beside the notation, in space the centred stave was leaving empty. Sized
 // to be readable from playing distance rather than from a mouse.
-export function ScorePanel({ practice, windows, expanded = false, onToggleExpand }) {
+export function ScorePanel({ practice, windows, activeInstruments = [], expanded = false, onToggleExpand, onHide }) {
     const { passStats, recentHits, extraCount, calibration } = practice;
 
     const accuracy = passStats ? Math.round(passStats.accuracy * 100) : null;
@@ -418,19 +463,37 @@ export function ScorePanel({ practice, windows, expanded = false, onToggleExpand
             pad: 'p-6 space-y-6',
         }
         : {
-            wrap: 'w-[290px] flex-shrink-0',
+            // Width is decided by the parent now, so the panel can take half
+            // the strip beside the notation or all of it when that is hidden.
+            wrap: 'flex-1 min-w-0',
             accuracy: 'text-5xl',
             pct: 'text-2xl',
             feel: 'text-lg',
             feelUnit: 'text-xs',
             caption: label,
-            meter: 'h-14',
+            meter: 'h-20',
             mark: 'w-[3px]',
             tallyText: 'text-[9px]',
             tallyNum: 'text-[11px]',
             swatch: 'w-2.5 h-2.5',
             pad: 'p-3 space-y-3',
         };
+
+    // Lanes come from the pattern, not from what has been hit, so a drum you
+    // are missing entirely still gets a visibly empty row instead of silently
+    // vanishing from the display.
+    const laneOrder = activeInstruments.length
+        ? activeInstruments
+        : [...new Set(recentHits.map(h => h.instrumentIndex))].filter(i => i != null);
+
+    const lanes = laneOrder.map(index => {
+        const laneHits = [];
+        recentHits.forEach((h, i) => {
+            if (h.instrumentIndex !== index || h.deltaMs == null) return;
+            laneHits.push({ ...h, opacity: Math.max(0.2, 1 - (recentHits.length - i) * 0.05) });
+        });
+        return { index, name: instruments[index]?.name ?? '', hits: laneHits };
+    });
 
     const counts = passStats?.counts;
     const tally = [
@@ -457,13 +520,21 @@ export function ScorePanel({ practice, windows, expanded = false, onToggleExpand
                         Uncalibrated
                     </span>
                 )}
-                <button
-                    onClick={onToggleExpand}
-                    title={expanded ? 'Shrink (Esc)' : 'Fill the screen'}
-                    className="ml-auto hover:opacity-60 transition-opacity"
-                >
-                    {expanded ? <Minimize2 size={16} /> : <Maximize2 size={13} />}
-                </button>
+                <div className="ml-auto flex items-center gap-2">
+                    <button
+                        onClick={onToggleExpand}
+                        title={expanded ? 'Shrink (Esc)' : 'Fill the screen'}
+                        className="hover:opacity-60 transition-opacity"
+                    >
+                        {expanded ? <Minimize2 size={16} /> : <Maximize2 size={13} />}
+                    </button>
+                    {!expanded && onHide && (
+                        <button onClick={onHide} title="Hide live timing"
+                            className="hover:opacity-60 transition-opacity">
+                            <EyeOff size={13} />
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className={`${sz.pad} flex-1 flex flex-col min-h-0`}>
@@ -515,65 +586,83 @@ export function ScorePanel({ practice, windows, expanded = false, onToggleExpand
                         </span>
                     </div>
 
-                    <div className={`relative ${sz.meter} border-2 border-black bg-gray-50 overflow-hidden`}>
-                        {/* on-time band */}
-                        <div
-                            className="absolute inset-y-0"
-                            style={{
-                                left: `${positionPct(-windows.tight)}%`,
-                                right: `${100 - positionPct(windows.tight)}%`,
-                                backgroundColor: `${VERDICT_COLOURS.good}22`,
-                            }}
-                        />
-                        {/* centre line */}
-                        <div className="absolute inset-y-0 left-1/2 w-px bg-black opacity-60" />
-
-                        {/* At full size there is room to label the scale. The
-                            outermost two sit exactly on the edges, so they are
-                            anchored inward instead of centred or they clip. */}
-                        {expanded && [-span, -windows.tight, windows.tight, span].map(v => {
-                            const atLeftEdge = v === -span;
-                            const atRightEdge = v === span;
-                            return (
+                    {/* One lane per drum. A single shared band cannot show
+                        that the kick is consistently late while the snare is
+                        fine — with lanes, a limb that drags reads as a whole
+                        row sitting off-centre. */}
+                    <div className={`flex ${expanded ? 'flex-1 min-h-0' : ''}`}>
+                        <div className={`${expanded ? 'w-20' : 'w-14'} flex-shrink-0 flex flex-col`}>
+                            {lanes.map(lane => (
                                 <div
-                                    key={v}
-                                    className={`absolute bottom-1 text-[10px] font-bold tabular-nums text-gray-400
-                                        ${atLeftEdge || atRightEdge ? '' : '-translate-x-1/2'}`}
-                                    style={atLeftEdge ? { left: '4px' }
-                                        : atRightEdge ? { right: '4px' }
-                                            : { left: `${positionPct(v)}%` }}
+                                    key={lane.index}
+                                    className={`flex-1 flex items-center justify-end pr-1 min-w-0
+                                        ${expanded ? 'text-[11px]' : 'text-[8px]'} font-bold uppercase text-gray-500`}
                                 >
-                                    {v > 0 ? `+${v}` : v}
+                                    <span className="truncate">{lane.name}</span>
                                 </div>
-                            );
-                        })}
+                            ))}
+                        </div>
 
-                        {recentHits.map((h, i) => {
-                            if (h.deltaMs == null) return null;
-                            const age = recentHits.length - i;
-                            return (
+                        <div className={`relative flex-1 ${expanded ? '' : sz.meter} border-2 border-black bg-gray-50 overflow-hidden flex flex-col`}>
+                            {/* on-time band, spanning every lane */}
+                            <div
+                                className="absolute inset-y-0 z-0"
+                                style={{
+                                    left: `${positionPct(-windows.tight)}%`,
+                                    right: `${100 - positionPct(windows.tight)}%`,
+                                    backgroundColor: `${VERDICT_COLOURS.good}22`,
+                                }}
+                            />
+                            <div className="absolute inset-y-0 left-1/2 w-px bg-black opacity-60 z-10" />
+
+                            {lanes.map((lane, li) => (
                                 <div
-                                    key={h.id}
-                                    title={`${h.instrument} ${h.deltaMs > 0 ? '+' : ''}${Math.round(h.deltaMs)}ms`}
-                                    className={`absolute ${sz.mark} rounded-sm`}
-                                    style={{
-                                        left: `calc(${positionPct(h.deltaMs)}% - ${expanded ? 3 : 1.5}px)`,
-                                        top: '6%',
-                                        height: expanded ? '80%' : '88%',
-                                        backgroundColor: VERDICT_COLOURS[h.verdict],
-                                        opacity: Math.max(0.18, 1 - age * 0.06),
-                                    }}
-                                />
-                            );
-                        })}
+                                    key={lane.index}
+                                    className={`relative flex-1 min-h-0 ${li < lanes.length - 1 ? 'border-b border-gray-300' : ''}`}
+                                >
+                                    {lane.hits.map(h => (
+                                        <div
+                                            key={h.id}
+                                            title={`${h.instrument} ${h.deltaMs > 0 ? '+' : ''}${Math.round(h.deltaMs)}ms`}
+                                            className={`absolute ${sz.mark} rounded-sm z-20`}
+                                            style={{
+                                                left: `calc(${positionPct(h.deltaMs)}% - ${expanded ? 3 : 1.5}px)`,
+                                                top: '15%',
+                                                height: '70%',
+                                                backgroundColor: VERDICT_COLOURS[h.verdict],
+                                                opacity: h.opacity,
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            ))}
 
-                        {recentHits.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className={`${sz.caption} font-bold uppercase text-gray-400`}>
-                                    Play to see timing
-                                </span>
-                            </div>
-                        )}
+                            {/* Scale labels sit over the lanes at full size. The
+                                outermost two are on the edges, so they anchor
+                                inward rather than centring, or they clip. */}
+                            {expanded && [-span, -windows.tight, windows.tight, span].map(v => {
+                                const left = v === -span, right = v === span;
+                                return (
+                                    <div
+                                        key={v}
+                                        className={`absolute bottom-0.5 text-[10px] font-bold tabular-nums text-gray-400 z-30
+                                            ${left || right ? '' : '-translate-x-1/2'}`}
+                                        style={left ? { left: '4px' } : right ? { right: '4px' }
+                                            : { left: `${positionPct(v)}%` }}
+                                    >
+                                        {v > 0 ? `+${v}` : v}
+                                    </div>
+                                );
+                            })}
+
+                            {lanes.every(l => l.hits.length === 0) && (
+                                <div className="absolute inset-0 flex items-center justify-center z-30">
+                                    <span className={`${sz.caption} font-bold uppercase text-gray-400`}>
+                                        Play to see timing
+                                    </span>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 

@@ -63,6 +63,11 @@ export const usePracticeMode = ({ machine }) => {
     // So a failure to start is always visible. The previous silent return left
     // the button looking inert with no way to tell what had gone wrong.
     const [calibrationError, setCalibrationError] = useState(null);
+    // Drives the visual metronome during calibration. Audio alone is hard to
+    // follow here, because the click and the kit sound alike enough that it is
+    // easy to lose which one you are meant to be hitting on.
+    const [calibrationBeat, setCalibrationBeat] = useState(-1);
+    const [calibrationHitCount, setCalibrationHitCount] = useState(0);
 
     // Scoring output, flushed to state on a throttle
     const [cellScores, setCellScores] = useState({});
@@ -151,6 +156,7 @@ export const usePracticeMode = ({ machine }) => {
             // previous run and then overwrite the offset with it — so a second
             // calibration would reset a correct offset back to roughly zero.
             calibSamplesRef.current.push({ rawAudioTime });
+            setCalibrationHitCount(calibSamplesRef.current.length);
             return;
         }
 
@@ -280,6 +286,7 @@ export const usePracticeMode = ({ machine }) => {
                         id: note.key,
                         verdict: result.verdict,
                         deltaMs: result.deltaMs,
+                        instrumentIndex: note.instrumentIndex,
                         instrument: instruments[note.instrumentIndex]?.name ?? '',
                     });
                     if (recentHitsRef.current.length > 32) recentHitsRef.current.shift();
@@ -420,6 +427,8 @@ export const usePracticeMode = ({ machine }) => {
         calibratingRef.current = true;
         setCalibrating(true);
         setCalibrationProgress(0);
+        setCalibrationBeat(-1);
+        setCalibrationHitCount(0);
 
         const start = ctx.currentTime + 1.0;
         for (let i = 0; i < CALIBRATION_CLICKS; i++) {
@@ -431,12 +440,31 @@ export const usePracticeMode = ({ machine }) => {
         const totalMs = (CALIBRATION_CLICKS * CALIBRATION_INTERVAL + 1.2) * 1000;
         const startedAt = performance.now();
 
+        // Advance the visual metronome against the time the click is *heard*,
+        // taken from getOutputTimestamp, not the time it was scheduled. On a
+        // high-latency output those differ by well over a tenth of a second,
+        // and a visual that leads the sound is worse than none at all.
+        let frame;
+        const followBeat = () => {
+            const ts = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
+            const heard = ts && ts.contextTime > 0
+                ? ts.contextTime
+                : ctx.currentTime - ((ctx.baseLatency || 0) + (ctx.outputLatency || 0));
+            let played = 0;
+            for (const t of calibClicksRef.current) if (t <= heard) played++;
+            setCalibrationBeat(played - 1);
+            frame = requestAnimationFrame(followBeat);
+        };
+        frame = requestAnimationFrame(followBeat);
+
         const poll = setInterval(() => {
             setCalibrationProgress(Math.min(1, (performance.now() - startedAt) / totalMs));
         }, 100);
 
         window.setTimeout(() => {
             clearInterval(poll);
+            cancelAnimationFrame(frame);
+            setCalibrationBeat(-1);
             calibratingRef.current = false;
             setCalibrating(false);
             setCalibrationProgress(1);
@@ -521,6 +549,7 @@ export const usePracticeMode = ({ machine }) => {
         midiMap, learnTarget, setLearnTarget, clearMapping, resetMapping,
         settings, updateSettings,
         calibration, calibrating, calibrationProgress, calibrationError,
+        calibrationBeat, calibrationHitCount, calibrationClicks: CALIBRATION_CLICKS,
         startCalibration, setCalibrationOffset,
         cellScores, passStats, recentPasses, extraCount, recentHits,
         timingDiag, applySuggestedOffset,

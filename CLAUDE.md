@@ -8,9 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev      # Start dev server at http://localhost:5173
 npm run build    # Production build
 npm run preview  # Preview production build
+npm test         # Scoring logic tests (tests/scoring.test.mjs)
 ```
 
-No test runner is configured.
+`npm test` covers `src/utils/scoring.js` — the part of practice mode with no React and no clocks in it, where a subtle error is invisible in the UI. Several cases are regressions for bugs that shipped. Everything above that layer needs a browser and is not covered.
 
 ## Environment Setup
 
