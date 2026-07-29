@@ -313,6 +313,7 @@ export default function Design1() {
                     <ScorePanel
                         practice={practice}
                         windows={practice.settings.windows}
+                        activeInstruments={activeInstruments}
                         expanded
                         onToggleExpand={() => setScoreExpanded(false)}
                     />

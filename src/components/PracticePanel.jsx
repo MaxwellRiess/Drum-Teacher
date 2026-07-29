@@ -482,9 +482,15 @@ export function ScorePanel({ practice, windows, activeInstruments = [], expanded
     // Lanes come from the pattern, not from what has been hit, so a drum you
     // are missing entirely still gets a visibly empty row instead of silently
     // vanishing from the display.
+    // The fallback is sorted rather than in first-seen order. recentHits is a
+    // rolling window, so an unsorted fallback both adds and reorders lanes as
+    // it turns over — and because lanes share the height with flex-1, every
+    // change shifts all of them vertically.
     const laneOrder = activeInstruments.length
         ? activeInstruments
-        : [...new Set(recentHits.map(h => h.instrumentIndex))].filter(i => i != null);
+        : [...new Set(recentHits.map(h => h.instrumentIndex))]
+            .filter(i => i != null)
+            .sort((a, b) => a - b);
 
     const lanes = laneOrder.map(index => {
         const laneHits = [];
