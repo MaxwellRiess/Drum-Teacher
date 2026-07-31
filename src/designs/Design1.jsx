@@ -383,7 +383,8 @@ export default function Design1() {
                                             <EyeOff size={11} />
                                         </button>
                                     </div>
-                                    <NotationView
+                                    <div className="flex-1 min-h-0">
+                                        <NotationView
                                         grid={machine.grid}
                                         beats={machine.beats}
                                         subdiv={machine.subdiv}
@@ -392,7 +393,8 @@ export default function Design1() {
                                         activeRudiment={machine.activeRudiment}
                                         tripletGrid={machine.tripletGrid}
                                         cellScores={practice.enabled ? practice.cellScores : null}
-                                    />
+                                        />
+                                    </div>
                                 </div>
                             )}
 

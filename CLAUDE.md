@@ -143,6 +143,10 @@ Calls the Anthropic API (`claude-opus-5`) via `@anthropic-ai/sdk` with `dangerou
 
 ### Notation: `src/components/NotationView.jsx`
 
+The stave is laid out at a fixed natural size (200px tall) and then **scaled** to whatever box it is given, so growing the strip enlarges the notation instead of revealing whitespace. Scaling is uniform, so a stave already limited by width cannot grow taller — it is centred vertically in that case. Hiding the timing panel gives it the full width and lets it scale up further.
+
+The `ResizeObserver` watches the **root**, not the inner wrapper. The wrapper's height *is* the SVG's height, so observing it and then resizing the SVG in response is a feedback loop; the root is sized by its flex parent and so is a stable measure of the space on offer.
+
 VexFlow 4.2.5-based drum notation renderer. Uses two voices on one percussion stave:
 - **Hands voice** (stems up): metronome, hi-hats, clap, snare, toms
 - **Feet voice** (stems down): kick

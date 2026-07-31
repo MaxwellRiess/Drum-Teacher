@@ -16,7 +16,7 @@ RhythmCraft is an interactive drum sequencer designed for drummers and educators
     -   **Accurate Placement**: Standard drum key mapping (Snare on C, Kick on F, etc.).
 -   **Audio Engine**: Low-latency Web Audio API playback with realistic samples.
 -   **Per-drum mixer**: A level slider under each instrument name, including the metronome. Built for playing an electronic kit through the same speakers as the app, where the two compete and you need to hear more of yourself than of the click.
--   **Resizable layout**: Drag the divider between the notation/timing strip and the sequencer to trade vertical space between them. Double-click to reset.
+-   **Resizable layout**: Drag the divider between the notation/timing strip and the sequencer to trade vertical space between them; both panes scale their contents to fit rather than padding with whitespace. Double-click to reset.
 -   **Practice Tools**:
     -   **Dynamic BPM**: Change tempo in real-time.
     -   **Swing Control**: Add groove to your beats.

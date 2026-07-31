@@ -455,7 +455,7 @@ export function ScorePanel({ practice, windows, activeInstruments = [], expanded
             feel: 'text-6xl',
             feelUnit: 'text-2xl',
             caption: 'text-sm',
-            meter: 'flex-1 min-h-[160px]',
+            meter: 'min-h-[160px]',
             mark: 'w-[6px]',
             tallyText: 'text-base',
             tallyNum: 'text-2xl',
@@ -471,7 +471,9 @@ export function ScorePanel({ practice, windows, activeInstruments = [], expanded
             feel: 'text-lg',
             feelUnit: 'text-xs',
             caption: label,
-            meter: 'h-20',
+            // Grows with the panel like the expanded one; the floor stops the
+            // lanes collapsing to unreadable slivers when the strip is short.
+            meter: 'min-h-[56px]',
             mark: 'w-[3px]',
             tallyText: 'text-[9px]',
             tallyNum: 'text-[11px]',
@@ -575,7 +577,7 @@ export function ScorePanel({ practice, windows, activeInstruments = [], expanded
                 {/* ── Timing meter ── */}
                 {/* One mark per recent note, oldest faintest, so the drift of a
                     whole phrase is visible rather than just the last hit. */}
-                <div className={`${expanded ? 'flex-1 flex flex-col min-h-0 mt-6' : 'mt-3'}`}>
+                <div className={`flex-1 flex flex-col min-h-0 ${expanded ? 'mt-6' : 'mt-3'}`}>
                     <div className="flex justify-between mb-1 flex-shrink-0">
                         <span
                             className={`${expanded ? 'text-sm' : 'text-[8px]'} font-bold uppercase`}
@@ -596,7 +598,7 @@ export function ScorePanel({ practice, windows, activeInstruments = [], expanded
                         that the kick is consistently late while the snare is
                         fine — with lanes, a limb that drags reads as a whole
                         row sitting off-centre. */}
-                    <div className={`flex ${expanded ? 'flex-1 min-h-0' : ''}`}>
+                    <div className="flex flex-1 min-h-0 min-h-[56px]">
                         <div className={`${expanded ? 'w-20' : 'w-14'} flex-shrink-0 flex flex-col`}>
                             {lanes.map(lane => (
                                 <div
@@ -609,7 +611,7 @@ export function ScorePanel({ practice, windows, activeInstruments = [], expanded
                             ))}
                         </div>
 
-                        <div className={`relative flex-1 ${expanded ? '' : sz.meter} border-2 border-black bg-gray-50 overflow-hidden flex flex-col`}>
+                        <div className={`relative flex-1 ${sz.meter} border-2 border-black bg-gray-50 overflow-hidden flex flex-col`}>
                             {/* on-time band, spanning every lane */}
                             <div
                                 className="absolute inset-y-0 z-0"

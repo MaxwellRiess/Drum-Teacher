@@ -210,11 +210,13 @@ function buildTripletVoice(hitMap, totalSteps, subdiv, stemDir, restKey = 'b/4')
 export const NotationView = ({
     grid, beats, subdiv, currentStep, mutedTracks, tripletGrid = null, cellScores = null,
 }) => {
+    const rootRef       = useRef(null);
     const wrapperRef    = useRef(null);
     const containerRef  = useRef(null);
     const cursorRef     = useRef(null);
     const stepXRef      = useRef([]);
     const svgLeftOffset = useRef(0);
+    const cursorScaleRef = useRef(1);
 
     // Maps "s<step>:<instrumentIndex>" to the notehead's SVG element, so
     // practice verdicts can recolour individual noteheads directly rather than
@@ -228,19 +230,23 @@ export const NotationView = ({
     // changes, and anything that resizes it in place — the live score panel
     // appearing beside it, or the window being dragged — leaves the stave at
     // its old width, overflowing into a scrollbar.
-    const [availableWidth, setAvailableWidth] = useState(0);
+    // Deliberately observes the ROOT, not the wrapper. The wrapper's height is
+    // the SVG's height, so watching it and then resizing the SVG in response is
+    // a feedback loop. The root is sized by its flex parent instead, which makes
+    // it a stable measure of the space actually on offer.
+    const [box, setBox] = useState({ w: 0, h: 0 });
     useEffect(() => {
-        const el = wrapperRef.current;
+        const el = rootRef.current;
         if (!el || typeof ResizeObserver === 'undefined') return;
         const observer = new ResizeObserver(([entry]) => {
             const w = Math.round(entry.contentRect.width);
-            // Round-trip guard: redrawing changes the SVG width, which can nudge
-            // the wrapper by a pixel and start an observer loop.
-            setAvailableWidth(prev => (Math.abs(prev - w) > 2 ? w : prev));
+            const h = Math.round(entry.contentRect.height);
+            setBox(prev => (Math.abs(prev.w - w) > 2 || Math.abs(prev.h - h) > 2 ? { w, h } : prev));
         });
         observer.observe(el);
         return () => observer.disconnect();
     }, []);
+    const availableWidth = box.w;
 
     const applyScoreColours = () => {
         const scores = cellScoresRef.current;
@@ -259,9 +265,19 @@ export const NotationView = ({
     useEffect(() => {
         if (!containerRef.current || !wrapperRef.current) return;
 
-        const measured     = availableWidth || wrapperRef.current.offsetWidth || 900;
+        const measured     = availableWidth || rootRef.current?.clientWidth || 900;
         const naturalWidth = Math.max(300, beats * subdiv * 30 + 120);
         const staveWidth   = Math.min(naturalWidth, measured - 20);
+
+        // The stave is laid out at a fixed natural size and then scaled to the
+        // box it has been given, so extra height enlarges the notation instead
+        // of just revealing whitespace under it. Scaling is uniform, so a stave
+        // already limited by width cannot grow — in that case it scales down if
+        // the strip is short, which at least keeps the whole stave visible.
+        const BASE_HEIGHT = 200;
+        const widthHeadroom = measured / (staveWidth + 20);
+        const heightHeadroom = (box.h || BASE_HEIGHT) / BASE_HEIGHT;
+        const scale = Math.max(0.55, Math.min(2.5, widthHeadroom, heightHeadroom));
 
         containerRef.current.innerHTML = '';
 
@@ -270,8 +286,9 @@ export const NotationView = ({
         const table      = isTriplet ? null : buildNoteTable(subdiv);
 
         const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG);
-        renderer.resize(staveWidth + 20, 200);
+        renderer.resize(Math.round((staveWidth + 20) * scale), Math.round(BASE_HEIGHT * scale));
         const ctx = renderer.getContext();
+        ctx.scale(scale, scale);
 
         const stave = new Stave(10, 30, staveWidth);
         stave.addClef('percussion');
@@ -443,8 +460,9 @@ export const NotationView = ({
             if (stepX[s] !== null) { lastX = stepX[s]; }
             else if (lastX !== null) { stepX[s] = lastX; }
         }
-        stepXRef.current = stepX;
-    }, [grid, beats, subdiv, mutedTracks, tripletGrid, availableWidth]);
+        stepXRef.current = stepX.map(x => (x === null ? null : x * scale));
+        cursorScaleRef.current = scale;
+    }, [grid, beats, subdiv, mutedTracks, tripletGrid, box.w, box.h]);
 
     // Recolour in place. Deliberately not a dependency of the render effect
     // above: scores land several times a second and re-running VexFlow that
@@ -465,13 +483,13 @@ export const NotationView = ({
     }, [currentStep]);
 
     return (
-        <div className="w-full overflow-x-auto">
-            <div ref={wrapperRef} className="relative flex justify-center">
+        <div ref={rootRef} className="w-full h-full overflow-auto flex items-center">
+            <div ref={wrapperRef} className="relative flex justify-center w-full">
                 <div ref={containerRef} />
                 <div
                     ref={cursorRef}
                     style={{
-                        position: 'absolute', top: '10px', height: '180px',
+                        position: 'absolute', top: '5%', height: '90%',
                         width: '2px', backgroundColor: '#f43f5e',
                         opacity: 0.8, pointerEvents: 'none', display: 'none',
                     }}
