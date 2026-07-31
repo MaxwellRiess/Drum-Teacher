@@ -15,6 +15,8 @@ RhythmCraft is an interactive drum sequencer designed for drummers and educators
     -   **Complex Rhythms**: Support for dotted notes, beams, and rests.
     -   **Accurate Placement**: Standard drum key mapping (Snare on C, Kick on F, etc.).
 -   **Audio Engine**: Low-latency Web Audio API playback with realistic samples.
+-   **Per-drum mixer**: A level slider under each instrument name, including the metronome. Built for playing an electronic kit through the same speakers as the app, where the two compete and you need to hear more of yourself than of the click.
+-   **Resizable layout**: Drag the divider between the notation/timing strip and the sequencer to trade vertical space between them. Double-click to reset.
 -   **Practice Tools**:
     -   **Dynamic BPM**: Change tempo in real-time.
     -   **Swing Control**: Add groove to your beats.
@@ -86,11 +88,14 @@ local storage and sent directly from your browser to `api.anthropic.com`. The
 app has no backend for this — nothing to log your key, nothing to leak it.
 
 The tradeoff of that design is local storage: any script running on this page
-could read the key, so a cross-site-scripting hole would expose it. The app
-renders no user-supplied HTML and loads no third-party scripts, which keeps that
-risk small, but treat the stored key accordingly — scope it to what you are
-willing to spend, and don't leave one saved on a shared computer. Use **Forget**
-to remove it.
+can read the key. The app renders no user-supplied HTML, so there is no obvious
+injection route — but `index.html` does load Tailwind from `cdn.tailwindcss.com`,
+and that third-party script has the same access to local storage as everything
+else on the page. The practical risk is low, but it is not zero, and it is worth
+knowing rather than assuming otherwise.
+
+Treat the stored key accordingly: scope it to what you are willing to spend, and
+don't leave one saved on a shared computer. Use **Forget** to remove it.
 
 Get a key from the [Anthropic Console](https://console.anthropic.com/settings/keys).
 

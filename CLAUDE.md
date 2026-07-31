@@ -49,6 +49,8 @@ This file is the heart of the app. It exports:
 
 The scheduler uses the Web Audio API clock (not `setInterval`) via a lookahead scheduler pattern for precise timing.
 
+**Per-instrument levels.** `DrumSynth.init()` builds one gain node per instrument, all feeding `masterGain`, and every voice method takes a destination so `playInstrument` can route through the right one. Two things to keep in mind: channels only exist once the context is built, so `applyVolumes()` has to run after every `init()` as well as on change; and the click-only pulse calls `playWoodblock` directly rather than going through `playInstrument`, so it must be passed the metronome channel explicitly or it ignores that fader.
+
 **`clickOnly`** silences the kit during playback and emits a generated pulse instead: one woodblock per beat, at 1200 Hz on step 0 and 800 Hz elsewhere. Two things matter about how it is built:
 
 - It is **not** implemented via `mutedTracks`. Muting removes a track from `scheduleNote` entirely, which also removes it from the notation and stops `pushExpected` firing for it, so muted notes are never scored. Click-only skips `playInstrument` but still calls `pushExpected`, leaving the pattern, notation and scoring identical.

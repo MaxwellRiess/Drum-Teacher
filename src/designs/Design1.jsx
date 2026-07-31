@@ -134,6 +134,49 @@ export default function Design1() {
         try { localStorage.setItem('drumTeacher.panes.v1', JSON.stringify(next)); } catch { /* ignore */ }
         return next;
     });
+    // Height of the strip above the sequencer, in px. null means "size to
+    // content", which is the old behaviour and stays the default.
+    const [stripHeight, setStripHeight] = useState(() => {
+        try {
+            const v = Number(localStorage.getItem('drumTeacher.stripHeight.v1'));
+            return Number.isFinite(v) && v > 0 ? v : null;
+        } catch { return null; }
+    });
+    const stripRef = useRef(null);
+    const [dragging, setDragging] = useState(false);
+
+    const startStripDrag = (e) => {
+        e.preventDefault();
+        const startY = e.clientY;
+        const startH = stripRef.current?.getBoundingClientRect().height ?? 0;
+        setDragging(true);
+
+        const onMove = (ev) => {
+            // Floor keeps the stave readable. Ceiling leaves roughly 150px of
+            // sequencer — about 20px a row, tight but still playable. Dragging
+            // further than that is what the full-screen timing view is for, so
+            // there is no reason to allow a sequencer nobody can read.
+            const next = Math.max(130, Math.min(window.innerHeight - 300, startH + (ev.clientY - startY)));
+            setStripHeight(Math.round(next));
+        };
+        const onUp = () => {
+            setDragging(false);
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            setStripHeight(h => {
+                try { localStorage.setItem('drumTeacher.stripHeight.v1', String(h ?? '')); } catch { /* ignore */ }
+                return h;
+            });
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
+
+    const resetStripHeight = () => {
+        setStripHeight(null);
+        try { localStorage.removeItem('drumTeacher.stripHeight.v1'); } catch { /* ignore */ }
+    };
+
     const [copied, setCopied] = useState(false);
     const [expandedTripletRows, setExpandedTripletRows] = useState(new Set());
 
@@ -321,7 +364,11 @@ export default function Design1() {
             ) : (
                 <>
                     {stripHasContent && (
-                        <div className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-2 flex-shrink-0 flex gap-3 items-stretch">
+                        <div
+                            ref={stripRef}
+                            style={stripHeight ? { height: `${stripHeight}px` } : undefined}
+                            className="border-b-2 border-black bg-gray-50 px-3 pt-1 pb-2 flex-shrink-0 flex gap-3 items-stretch overflow-hidden"
+                        >
                             {/* Even split when both panes show; whichever is left
                                 takes the full width on its own. */}
                             {showNotation && (
@@ -358,6 +405,20 @@ export default function Design1() {
                                     onHide={() => setPane('timing', false)}
                                 />
                             )}
+                        </div>
+                    )}
+
+                    {/* Drag to trade height between this strip and the
+                        sequencer. Double-click returns to sizing by content. */}
+                    {stripHasContent && (
+                        <div
+                            onMouseDown={startStripDrag}
+                            onDoubleClick={resetStripHeight}
+                            title="Drag to resize · double-click to reset"
+                            className={`h-2 flex-shrink-0 cursor-row-resize border-b-2 border-black flex items-center justify-center group
+                                ${dragging ? 'bg-black' : 'bg-gray-200 hover:bg-gray-300'}`}
+                        >
+                            <div className={`w-10 h-0.5 rounded-full ${dragging ? 'bg-white' : 'bg-gray-500 group-hover:bg-black'}`} />
                         </div>
                     )}
 
@@ -438,6 +499,27 @@ export default function Design1() {
                                                 M
                                             </button>
                                         </div>
+
+                                        {/* Level. Sits under the name so the
+                                            balance against your own playing is
+                                            adjustable without leaving the grid. */}
+                                        <div className="flex items-center gap-1 pr-2 pl-2 pb-0.5 flex-shrink-0">
+                                            <input
+                                                type="range"
+                                                min="0" max="100"
+                                                value={Math.round((machine.volumes[inst.id] ?? 1) * 100)}
+                                                onChange={e => machine.setVolume(inst.id, Number(e.target.value) / 100)}
+                                                title={`${inst.name} level: ${Math.round((machine.volumes[inst.id] ?? 1) * 100)}%`}
+                                                disabled={machine.mutedTracks[instIdx]}
+                                                className={`flex-1 min-w-0 h-1 cursor-pointer
+                                                    ${machine.mutedTracks[instIdx] ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                                style={{ accentColor: '#000' }}
+                                            />
+                                            <span className="text-[7px] font-bold tabular-nums text-gray-400 w-5 text-right">
+                                                {Math.round((machine.volumes[inst.id] ?? 1) * 100)}
+                                            </span>
+                                        </div>
+
                                         {/* Expand toggle */}
                                         <button
                                             onClick={() => toggleExpandedRow(instIdx)}

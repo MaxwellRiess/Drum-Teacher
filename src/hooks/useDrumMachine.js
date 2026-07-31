@@ -12,6 +12,7 @@ export class DrumSynth {
     constructor() {
         this.ctx = null;
         this.masterGain = null;
+        this.channels = null;
     }
 
     async init() {
@@ -20,18 +21,41 @@ export class DrumSynth {
             this.masterGain = this.ctx.createGain();
             this.masterGain.gain.value = 0.5;
             this.masterGain.connect(this.ctx.destination);
+
+            // One gain node per instrument, all feeding master. Playing an
+            // electronic kit through the same speakers as the app means the
+            // app's own sound competes with what you are playing, so each
+            // voice needs to be balanced against that independently.
+            this.channels = {};
+            for (const inst of instruments) {
+                const g = this.ctx.createGain();
+                g.gain.value = 1;
+                g.connect(this.masterGain);
+                this.channels[inst.id] = g;
+            }
         }
         if (this.ctx.state === 'suspended') {
             await this.ctx.resume();
         }
     }
 
-    playKick(time) {
+    // Falls back to master so a voice with no channel still sounds rather than
+    // silently failing to connect.
+    channel(id) {
+        return this.channels?.[id] ?? this.masterGain;
+    }
+
+    setChannelVolume(id, value) {
+        const c = this.channels?.[id];
+        if (c) c.gain.value = value;
+    }
+
+    playKick(time, dest) {
         if (!this.ctx) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(dest || this.masterGain);
 
         osc.frequency.setValueAtTime(150, time);
         osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
@@ -42,7 +66,7 @@ export class DrumSynth {
         osc.stop(time + 0.5);
     }
 
-    playSnare(time) {
+    playSnare(time, dest) {
         if (!this.ctx) return;
         const bufferSize = this.ctx.sampleRate * 0.5;
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
@@ -60,7 +84,7 @@ export class DrumSynth {
 
         noise.connect(noiseFilter);
         noiseFilter.connect(noiseGain);
-        noiseGain.connect(this.masterGain);
+        noiseGain.connect(dest || this.masterGain);
 
         noiseGain.gain.setValueAtTime(0.8, time);
         noiseGain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
@@ -69,7 +93,7 @@ export class DrumSynth {
         const osc = this.ctx.createOscillator();
         const oscGain = this.ctx.createGain();
         osc.connect(oscGain);
-        oscGain.connect(this.masterGain);
+        oscGain.connect(dest || this.masterGain);
         osc.frequency.value = 200;
         oscGain.gain.setValueAtTime(0.5, time);
         oscGain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
@@ -77,7 +101,7 @@ export class DrumSynth {
         osc.stop(time + 0.2);
     }
 
-    playHiHat(time, open = false) {
+    playHiHat(time, open = false, dest) {
         if (!this.ctx) return;
         const bufferSize = this.ctx.sampleRate * 0.5;
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
@@ -97,7 +121,7 @@ export class DrumSynth {
 
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(dest || this.masterGain);
 
         gain.gain.setValueAtTime(0.6, time);
         const decay = open ? 0.4 : 0.05;
@@ -106,12 +130,12 @@ export class DrumSynth {
         noise.start(time);
     }
 
-    playTom(time, pitch = 100) {
+    playTom(time, pitch = 100, dest) {
         if (!this.ctx) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(dest || this.masterGain);
 
         osc.frequency.setValueAtTime(pitch, time);
         osc.frequency.exponentialRampToValueAtTime(pitch * 0.5, time + 0.4);
@@ -122,7 +146,7 @@ export class DrumSynth {
         osc.stop(time + 0.4);
     }
 
-    playClap(time) {
+    playClap(time, dest) {
         if (!this.ctx) return;
         const bufferSize = this.ctx.sampleRate * 0.2;
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
@@ -141,7 +165,7 @@ export class DrumSynth {
         const gain = this.ctx.createGain();
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(dest || this.masterGain);
 
         gain.gain.setValueAtTime(0.7, time);
         gain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
@@ -151,12 +175,12 @@ export class DrumSynth {
 
     // pitch is raised for the downbeat so the top of the bar is findable by ear
     // when the kit itself is silent.
-    playWoodblock(time, pitch = 800) {
+    playWoodblock(time, pitch = 800, dest) {
         if (!this.ctx) return;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(dest || this.masterGain);
 
         // High pitched sine wave with short decay
         osc.frequency.setValueAtTime(pitch, time);
@@ -235,6 +259,8 @@ export const RUDIMENTS = [
     }
 ];
 
+const VOLUME_KEY = 'drumTeacher.volumes.v1';
+
 export const DEFAULT_BPM = 110;
 export const DEFAULT_BEATS = 4;
 export const DEFAULT_SUBDIV = 4;
@@ -255,6 +281,16 @@ export const useDrumMachine = () => {
     // also remove it from the notation and from practice scoring. Here the
     // pattern is untouched and only the audio changes.
     const [clickOnly, setClickOnly] = useState(false);
+
+    // Per-instrument levels, 0–1. A monitoring preference rather than part of
+    // the pattern, so it persists and is not carried in the shared URL.
+    const [volumes, setVolumes] = useState(() => {
+        const defaults = Object.fromEntries(instruments.map(i => [i.id, 1]));
+        try {
+            const raw = localStorage.getItem(VOLUME_KEY);
+            return raw ? { ...defaults, ...JSON.parse(raw) } : defaults;
+        } catch { return defaults; }
+    });
 
     // Rudiment State
     const [activeRudiment, setActiveRudiment] = useState(null);
@@ -278,6 +314,7 @@ export const useDrumMachine = () => {
     const subdivRef = useRef(subdiv);
     const swingRef = useRef(swing);
     const clickOnlyRef = useRef(clickOnly);
+    const volumesRef = useRef(volumes);
     const audioRef = useRef(new DrumSynth());
     const nextNoteTimeRef = useRef(0);
     const currentStepRef = useRef(0);
@@ -308,6 +345,7 @@ export const useDrumMachine = () => {
     useEffect(() => { subdivRef.current = subdiv; }, [subdiv]);
     useEffect(() => { swingRef.current = swing; }, [swing]);
     useEffect(() => { clickOnlyRef.current = clickOnly; }, [clickOnly]);
+    useEffect(() => { volumesRef.current = volumes; }, [volumes]);
     useEffect(() => { totalStepsRef.current = totalSteps; }, [totalSteps]);
 
     // Grid Resize Logic Helper
@@ -355,15 +393,16 @@ export const useDrumMachine = () => {
     // a fresh function each render would tear down its scoring loop constantly.
     const playInstrument = useCallback((id, time) => {
         const synth = audioRef.current;
+        const dest = synth.channel(id);
         switch (id) {
-            case 'kick': synth.playKick(time); break;
-            case 'snare': synth.playSnare(time); break;
-            case 'hihat_closed': synth.playHiHat(time, false); break;
-            case 'hihat_open': synth.playHiHat(time, true); break;
-            case 'tom_low': synth.playTom(time, 100); break;
-            case 'clap': synth.playClap(time); break;
-            case 'woodblock': synth.playWoodblock(time); break;
-            case 'metronome': synth.playWoodblock(time); break;
+            case 'kick': synth.playKick(time, dest); break;
+            case 'snare': synth.playSnare(time, dest); break;
+            case 'hihat_closed': synth.playHiHat(time, false, dest); break;
+            case 'hihat_open': synth.playHiHat(time, true, dest); break;
+            case 'tom_low': synth.playTom(time, 100, dest); break;
+            case 'clap': synth.playClap(time, dest); break;
+            case 'woodblock': synth.playWoodblock(time, 800, dest); break;
+            case 'metronome': synth.playWoodblock(time, 800, dest); break;
             default: break;
         }
     }, []);
@@ -438,7 +477,11 @@ export const useDrumMachine = () => {
         // the metronome track, so there is always something to play against even
         // when that row is empty. Accented on the downbeat.
         if (clickOnly && stepNumber % subdivRef.current === 0) {
-            audioRef.current.playWoodblock(time, stepNumber === 0 ? 1200 : 800);
+            audioRef.current.playWoodblock(
+                time,
+                stepNumber === 0 ? 1200 : 800,
+                audioRef.current.channel('metronome'),
+            );
         }
 
         // Normal grid
@@ -526,6 +569,7 @@ export const useDrumMachine = () => {
         } else {
             const synth = audioRef.current;
             await synth.init();
+            applyVolumes();
             setIsPlaying(true);
             currentStepRef.current = 0;
             barRef.current = 0;
@@ -554,6 +598,26 @@ export const useDrumMachine = () => {
 
     const getAudioContext = useCallback(() => audioRef.current.ctx, []);
 
+    // Channels only exist once the context has been built, so levels have to be
+    // pushed onto the graph after every init as well as on every change.
+    const applyVolumes = useCallback(() => {
+        const synth = audioRef.current;
+        if (!synth.channels) return;
+        for (const [id, v] of Object.entries(volumesRef.current)) {
+            synth.setChannelVolume(id, v);
+        }
+    }, []);
+
+    const setVolume = useCallback((id, value) => {
+        const clamped = Math.max(0, Math.min(1, value));
+        audioRef.current.setChannelVolume(id, clamped);
+        setVolumes(prev => {
+            const next = { ...prev, [id]: clamped };
+            try { localStorage.setItem(VOLUME_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+            return next;
+        });
+    }, []);
+
     // Creates the audio context if it does not exist yet and resumes it.
     // Anything that needs to make a sound without going through play — the
     // calibration click track, for one — has to call this first, because the
@@ -561,8 +625,9 @@ export const useDrumMachine = () => {
     // Must be reached from a user gesture or the browser will not start audio.
     const initAudio = useCallback(async () => {
         await audioRef.current.init();
+        applyVolumes();
         return audioRef.current.ctx;
-    }, []);
+    }, [applyVolumes]);
 
     const loadRudiment = (rudiment) => {
         const newGrid = instruments.map(() => Array(totalSteps).fill(false));
@@ -588,6 +653,7 @@ export const useDrumMachine = () => {
         swing, setSwing,
         mutedTracks, toggleMute,
         clickOnly, setClickOnly,
+        volumes, setVolume,
         grid, setGrid, toggleCell, clearGrid,
         loadRudiment, activeRudiment,
         loadState,
